@@ -83,10 +83,45 @@ jobs:
           echo "signing.keyPassword=${{ secrets.SIGNING_SK_PASSWORD }}" >> local.properties
 
       - name: Assemble APK
+        shell: bash
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: ./gradlew assemble${{ env.BUILD_TYPE }}
+        run: |
+          set -o pipefail
+          ./gradlew assemble${{ env.BUILD_TYPE }} --console=plain 2>&1 | tee build.log
+
+      # Derleme başarısız olursa hata satırlarını "annotation" olarak yaz (API'den okunabilsin)
+      - name: Report build errors
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          try:
+              lines = open("build.log", encoding="utf-8", errors="replace").read().splitlines()
+          except FileNotFoundError:
+              lines = ["build.log yok"]
+          pat = re.compile(r"^(e: |.*error:|FAILURE:|> Task .* FAILED|Execution failed|.*Unresolved reference|.*Could not (resolve|find|determine|get)|Caused by:|.*Exception:)")
+          picked = []
+          for i, l in enumerate(lines):
+              if l.startswith("* What went wrong"):
+                  picked.extend(lines[i:i + 15])
+              elif pat.search(l):
+                  picked.append(l)
+          if not picked:
+              picked = lines[-150:]
+          seen, out = set(), []
+          for l in picked:
+              l = l[:400]
+              if l not in seen:
+                  seen.add(l)
+                  out.append(l)
+          out = out[:200]
+          esc = lambda s: s.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          for n in range(0, len(out), 20):
+              print("::error title=Derleme hatasi " + str(n // 20 + 1) + "::" + esc("\n".join(out[n:n + 20])))
+          PY
 
       - name: List APK files
         run: ls -la core/app/build/outputs/apk/${{ env.BUILD_TYPE_LOWER }}/ || echo "Directory not found"
