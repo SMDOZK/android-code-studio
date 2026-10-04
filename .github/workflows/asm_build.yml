@@ -24,7 +24,7 @@ on:
       build_type:
         description: 'Select Build Type'
         required: true
-        default: 'Debug'
+        default: 'Release'
         type: choice
         options:
           - Debug
@@ -49,7 +49,7 @@ jobs:
       - name: Determine Build Type Configuration
         run: |
           SELECTED_TYPE="${{ github.event.inputs.build_type }}"
-          BUILD_TYPE="${SELECTED_TYPE:-Debug}"
+          BUILD_TYPE="${SELECTED_TYPE:-Release}"
           echo "BUILD_TYPE=$BUILD_TYPE" >> $GITHUB_ENV
           echo "BUILD_TYPE_LOWER=$(echo "$BUILD_TYPE" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
@@ -94,27 +94,6 @@ jobs:
       - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk-arm64-v8a-${{ env.BUILD_TYPE_LOWER }}
+          name: ACS-arm64-v8a-${{ env.BUILD_TYPE_LOWER }}
           path: core/app/build/outputs/apk/${{ env.BUILD_TYPE_LOWER }}/*arm64-v8a*.apk
-        if: always()
-
-      - name: Upload armeabi-v7a APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-armeabi-v7a-${{ env.BUILD_TYPE_LOWER }}
-          path: core/app/build/outputs/apk/${{ env.BUILD_TYPE_LOWER }}/*armeabi-v7a*.apk
-        if: always()
-
-      - name: Upload x86_64 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-x86_64-${{ env.BUILD_TYPE_LOWER }}
-          path: core/app/build/outputs/apk/${{ env.BUILD_TYPE_LOWER }}/*x86_64*.apk
-        if: always()
-
-      - name: Upload universal APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-universal-${{ env.BUILD_TYPE_LOWER }}
-          path: core/app/build/outputs/apk/${{ env.BUILD_TYPE_LOWER }}/*universal*.apk
-        if: always()
+          if-no-files-found: error

@@ -20,6 +20,7 @@ package com.tom.rv2ide.artificial.agents
 import android.content.Context
 import android.content.SharedPreferences
 import android.preference.PreferenceManager
+import com.tom.rv2ide.artificial.agents.custom.CustomApi
 
 /**
  * @author Mohammed-baqer-null @ https://github.com/Mohammed-baqer-null
@@ -154,8 +155,15 @@ class Agents(ctx: Context) {
       "deepseek" -> deepseek_models
       "grok" -> grok_models
       "localllm" -> localllm_models
+      CustomApi.PROVIDER_ID -> customModels()
       else -> gemini_models
     }
+  }
+
+  /** Özel API: model listesi yerine kullanıcının ayarlarda yazdığı model. */
+  private fun customModels(): Array<String> {
+    val model = CustomApi.savedModel()
+    return if (model.isBlank()) arrayOf("model-adi") else arrayOf(model)
   }
   
   fun getProviderForModel(modelName: String): String? {
@@ -166,12 +174,16 @@ class Agents(ctx: Context) {
       modelName in deepseek_models -> "deepseek"
       modelName in grok_models -> "grok"
       modelName in localllm_models -> "localllm"
+      modelName == CustomApi.savedModel() -> CustomApi.PROVIDER_ID
       else -> null
     }
   }
   
   fun setAgent(name: String) {
+      val current = sp.getString(PROVIDER_KEY, "gemini") ?: "gemini"
       val provider = when {
+          // Özel API seçiliyken kendi modeli başka bir listede de geçse sağlayıcı değişmesin
+          current == CustomApi.PROVIDER_ID && name == CustomApi.savedModel() -> CustomApi.PROVIDER_ID
           name in openai_models -> "openai"
           name in gemini_models -> "gemini"
           name in claude_models -> "claude"
@@ -194,6 +206,7 @@ class Agents(ctx: Context) {
       "claude" -> "claude-sonnet-4-20250514"
       "deepseek" -> "deepseek-chat"
       "grok" -> "grok-beta"
+      CustomApi.PROVIDER_ID -> CustomApi.savedModel()
       else -> "gemini-2.5-pro"
     }
   }

@@ -22,6 +22,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.tom.rv2ide.artificial.dialogs.LocalLLMConfigDialog
+import com.tom.rv2ide.artificial.dialogs.CustomApiConfigDialog
+import com.tom.rv2ide.artificial.agents.custom.CustomApi
 
 class AIPreferencesFragment(
     private val aiAgent: AIAgentManager,
@@ -89,10 +91,11 @@ class AIPreferencesFragment(
             "claude" to "Anthropic Claude",
             "deepseek" to "DeepSeek",
             "grok" to "xAI Grok",
-            "localllm" to "Local LLM"
+            "localllm" to "Local LLM",
+            CustomApi.PROVIDER_ID to CustomApi.PROVIDER_NAME
         )
         
-        val allProviderIds = listOf("gemini", "openai", "claude", "deepseek", "grok", "localllm")
+        val allProviderIds = listOf("gemini", "openai", "claude", "deepseek", "grok", "localllm", CustomApi.PROVIDER_ID)
         val providerNames = allProviderIds.map { providerMap[it] ?: it }
         
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, providerNames)
@@ -106,6 +109,8 @@ class AIPreferencesFragment(
             
             if (selectedProviderId == "localllm") {
                 showLocalLLMConfigDialog(selectedProviderName)
+            } else if (selectedProviderId == CustomApi.PROVIDER_ID) {
+                showCustomApiConfigDialog(selectedProviderName)
             } else {
                 handleProviderChange(selectedProviderId, selectedProviderName)
             }
@@ -119,6 +124,13 @@ class AIPreferencesFragment(
         dialog.show(parentFragmentManager, "LocalLLMConfigDialog")
     }
     
+    private fun showCustomApiConfigDialog(providerName: String) {
+        val dialog = CustomApiConfigDialog { _, _ ->
+            handleProviderChange(CustomApi.PROVIDER_ID, providerName)
+        }
+        dialog.show(parentFragmentManager, "CustomApiConfigDialog")
+    }
+
     private fun updateProviderDropdownSelection() {
         val providerMap = mapOf(
             "gemini" to "Google Gemini",
@@ -126,7 +138,8 @@ class AIPreferencesFragment(
             "claude" to "Anthropic Claude",
             "deepseek" to "DeepSeek",
             "grok" to "xAI Grok",
-            "localllm" to "Local LLM"
+            "localllm" to "Local LLM",
+            CustomApi.PROVIDER_ID to CustomApi.PROVIDER_NAME
         )
         
         val currentProviderId = agents.getProvider()
@@ -147,6 +160,7 @@ class AIPreferencesFragment(
             "deepseek" -> "DeepSeek"
             "grok" -> "xAI Grok"
             "localllm" -> "Local LLM"
+            CustomApi.PROVIDER_ID -> CustomApi.PROVIDER_NAME
             else -> currentProvider.uppercase()
         }
         

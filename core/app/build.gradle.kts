@@ -75,16 +75,24 @@ android {
 
   signingConfigs {
       create("custom") {
-          val keyStorePath = "${rootProject.projectDir}/signing/signing-key.jks"
-          val keyStoreFile = file(keyStorePath)
-          
           val signing_storePassword = System.getenv("SIGNING_STORE_PASSWORD") ?: ""
           val signing_keyPassword = System.getenv("SIGNING_KEY_PASSWORD") ?: ""
-          
-          storeFile = keyStoreFile
-          storePassword = signing_storePassword
-          keyAlias = "androidcs"
-          keyPassword = signing_keyPassword
+
+          if (signing_storePassword.isNotEmpty()) {
+              // Resmi derleme (GitHub Secrets ile)
+              storeFile = file("${rootProject.projectDir}/signing/signing-key.jks")
+              storePassword = signing_storePassword
+              keyAlias = "androidcs"
+              keyPassword = signing_keyPassword
+          } else {
+              // Kişisel derleme: şifre gizli değilse sabit kişisel anahtar kullanılır,
+              // böylece her derleme aynı imzayı taşır ve güncellemeler üst üste kurulur.
+              storeFile = file("${rootProject.projectDir}/signing/personal-key.jks")
+              storeType = "PKCS12"
+              storePassword = "AcsKisisel2026"
+              keyAlias = "acs"
+              keyPassword = "AcsKisisel2026"
+          }
       }
   }
 
