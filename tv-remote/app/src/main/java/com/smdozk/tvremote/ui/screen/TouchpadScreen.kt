@@ -21,8 +21,12 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +56,7 @@ import com.smdozk.tvremote.ui.theme.OnAccent
 import com.smdozk.tvremote.ui.theme.OnSurface
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
 import com.smdozk.tvremote.ui.theme.Purple
+import com.smdozk.tvremote.ui.theme.SurfaceVariant
 import com.smdozk.tvremote.viewmodel.MainViewModel
 import kotlin.math.abs
 
@@ -60,6 +65,7 @@ private val PadShape = RoundedCornerShape(28.dp)
 // Magic Remote style cursor: drag moves, tap clicks, two fingers scroll.
 @Composable
 fun TouchpadScreen(vm: MainViewModel) {
+    val speed by vm.pointerSpeed.collectAsState()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -70,10 +76,26 @@ fun TouchpadScreen(vm: MainViewModel) {
             onMove = vm::pointerMove,
             onScroll = vm::pointerScroll,
             onTap = vm::pointerClick,
+            speed = speed,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Hız", color = OnSurfaceDim, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Slider(
+                value = speed,
+                onValueChange = vm::setPointerSpeed,
+                valueRange = 0.5f..3f,
+                modifier = Modifier.weight(1f),
+                colors = SliderDefaults.colors(
+                    thumbColor = Cyan,
+                    activeTrackColor = Cyan,
+                    inactiveTrackColor = SurfaceVariant
+                )
+            )
+            Text("%.1fx".format(speed), color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PadKey(Icons.AutoMirrored.Filled.ArrowBack, "Geri") { vm.sendKey(TvKeyCode.BACK) }
             PadKey(Icons.Default.Home, "Ana Ekran", accent = true) { vm.sendKey(TvKeyCode.HOME) }
@@ -87,8 +109,10 @@ private fun Touchpad(
     onMove: (Float, Float) -> Unit,
     onScroll: (Float, Float) -> Unit,
     onTap: () -> Unit,
+    speed: Float,
     modifier: Modifier = Modifier
 ) {
+    val currentSpeed by rememberUpdatedState(speed)
     // Read only while drawing, so finger tracking never recomposes the screen.
     var touch by remember { mutableStateOf<Offset?>(null) }
 
@@ -137,7 +161,7 @@ private fun Touchpad(
                             if (travelled > slop) {
                                 val dp = delta / density
                                 // Pointer acceleration: slow drags are precise, flicks cross the screen.
-                                val gain = (1.4f + 0.08f * (abs(dp.x) + abs(dp.y))).coerceAtMost(4.5f)
+                                val gain = currentSpeed * (2.4f + 0.12f * (abs(dp.x) + abs(dp.y))).coerceAtMost(7f)
                                 onMove(dp.x * gain, dp.y * gain)
                             }
                             touch = change.position

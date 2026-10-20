@@ -146,6 +146,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _phoneDev = MutableStateFlow(phoneDevEnabled())
     val phoneDev: StateFlow<Boolean> = _phoneDev.asStateFlow()
 
+    private val _pointerSpeed = MutableStateFlow(prefs.getFloat(KEY_POINTER_SPEED, 1f).coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX))
+    val pointerSpeed: StateFlow<Float> = _pointerSpeed.asStateFlow()
+
     private val _devAuto = MutableStateFlow(prefs.getBoolean(KEY_DEV_AUTO, true))
     val devAuto: StateFlow<Boolean> = _devAuto.asStateFlow()
 
@@ -273,6 +276,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun setPointerSpeed(speed: Float) {
+        val value = speed.coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX)
+        _pointerSpeed.value = value
+        prefs.edit().putFloat(KEY_POINTER_SPEED, value).apply()
     }
 
     fun pointerMove(dx: Float, dy: Float) {
@@ -1083,6 +1092,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_LAST_MACS = "last_tv_macs"
         const val KEY_LAST_WEBOS_KEY = "webos_last_key"
         const val KEY_DEV_AUTO = "dev_auto"
+        const val KEY_POINTER_SPEED = "pointer_speed"
+        const val POINTER_SPEED_MIN = 0.5f
+        const val POINTER_SPEED_MAX = 3f
         const val KEY_DEV_PHONE_PROMPTED = "dev_phone_prompted"
         const val DEV_SSH_PORT = 9922
         const val DEV_CHECK_TIMEOUT_MS = 1_200
