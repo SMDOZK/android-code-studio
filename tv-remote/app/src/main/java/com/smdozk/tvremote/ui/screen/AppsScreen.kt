@@ -10,6 +10,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.filled.*
@@ -46,6 +52,13 @@ fun AppsScreen(vm: MainViewModel) {
     val isAdb = backend == TvKind.Adb
 
     var searchQuery by remember { mutableStateOf("") }
+    var link by remember { mutableStateOf("") }
+    val openLink = {
+        if (link.isNotBlank()) {
+            vm.openOnTv(link)
+            link = ""
+        }
+    }
     var uninstallTarget by remember { mutableStateOf<AppInfo?>(null) }
     val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.installApk(uri)
@@ -104,6 +117,28 @@ fun AppsScreen(vm: MainViewModel) {
                     }
                 },
                 singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Cyan,
+                    unfocusedBorderColor = SurfaceVariant
+                )
+            )
+            Spacer(Modifier.height(8.dp))
+            // YouTube links open in the TV's YouTube app, everything else in its browser.
+            OutlinedTextField(
+                value = link,
+                onValueChange = { link = it },
+                placeholder = { Text("Bağlantıyı TV'de aç (YouTube, web)") },
+                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null, tint = OnSurfaceDim) },
+                trailingIcon = {
+                    IconButton(onClick = openLink, enabled = link.isNotBlank()) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "TV'de aç", tint = Cyan)
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { openLink() }),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(

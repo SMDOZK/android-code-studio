@@ -27,13 +27,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Input
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -43,6 +49,8 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.TvOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -62,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +85,7 @@ import com.smdozk.tvremote.ui.components.AnimatedKey
 import com.smdozk.tvremote.ui.components.AnimatedTextKey
 import com.smdozk.tvremote.ui.components.DPad
 import com.smdozk.tvremote.ui.components.GlassCard
+import com.smdozk.tvremote.ui.components.NoticeBanner
 import com.smdozk.tvremote.ui.components.RockerKey
 import com.smdozk.tvremote.ui.theme.Amber
 import com.smdozk.tvremote.ui.theme.CardColor
@@ -96,6 +106,10 @@ fun RemoteScreen(vm: MainViewModel) {
     var showKeyboard by rememberSaveable { mutableStateOf(false) }
     val backend by vm.backend.collectAsState()
     val inputs by vm.inputs.collectAsState()
+    val volume by vm.volume.collectAsState()
+    val muted by vm.muted.collectAsState()
+    val notice by vm.remoteNotice.collectAsState()
+    val isWebOs = backend == TvKind.WebOs
 
     Column(
         modifier = Modifier
@@ -105,12 +119,14 @@ fun RemoteScreen(vm: MainViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
+        NoticeBanner(notice = notice, onDismiss = vm::clearRemoteNotice)
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             AnimatedIconKey(Icons.Default.PowerSettingsNew, "Güç", { sendKey(TvKeyCode.POWER) }, tint = PowerRed, glowColor = PowerRed)
             AnimatedIconKey(
                 Icons.AutoMirrored.Filled.Input,
                 "Kaynak",
-                { if (backend == TvKind.WebOs) vm.showInputs() else sendKey(TvKeyCode.TV_INPUT) }
+                { if (isWebOs) vm.showInputs() else sendKey(TvKeyCode.TV_INPUT) }
             )
             AnimatedIconKey(Icons.Default.Settings, "Ayarlar", { sendKey(TvKeyCode.SETTINGS) })
             AnimatedIconKey(Icons.AutoMirrored.Filled.VolumeOff, "Sessiz", { sendKey(TvKeyCode.VOLUME_MUTE) }, tint = Amber, glowColor = Amber)
@@ -131,7 +147,9 @@ fun RemoteScreen(vm: MainViewModel) {
             RockerKey(
                 label = "SES",
                 upIcon = Icons.Default.Add, upDescription = "Sesi aç", onUp = { sendKey(TvKeyCode.VOLUME_UP) },
-                downIcon = Icons.Default.Remove, downDescription = "Sesi kıs", onDown = { sendKey(TvKeyCode.VOLUME_DOWN) }
+                downIcon = Icons.Default.Remove, downDescription = "Sesi kıs", onDown = { sendKey(TvKeyCode.VOLUME_DOWN) },
+                // webOS pushes the level after every change; null on external speakers.
+                caption = if (muted) "—" else volume?.toString()
             )
             MediaCluster(sendKey)
             RockerKey(
@@ -154,6 +172,8 @@ fun RemoteScreen(vm: MainViewModel) {
         ) {
             TextInputCard(onSend = vm::inputText)
         }
+
+        if (isWebOs) WebOsKeysCard(onButton = vm::sendButton, onToggleScreen = vm::toggleScreen)
 
         Spacer(Modifier.height(4.dp))
     }
@@ -306,12 +326,61 @@ private fun RowScope.PadIconKey(
     }
 }
 
+// LG remote extras: colour keys, quick settings, info/guide and picture controls.
 @Composable
-private fun TextInputCard(onSend: (String) -> Unit) {
+private fun WebOsKeysCard(onButton: (String) -> Unit, onToggleScreen: () -> Unit) {
+    val colors = listOf(
+        "RED" to Color(0xFFE53935),
+        "GREEN" to Color(0xFF43A047),
+        "YELLOW" to Color(0xFFFDD835),
+        "BLUE" to Color(0xFF1E88E5)
+    )
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                colors.forEach { (name, color) ->
+                    AnimatedKey(
+                        onClick = { onButton(name) },
+                        modifier = Modifier.weight(1f).height(34.dp),
+                        shape = RoundedCornerShape(percent = 50),
+                        background = Brush.verticalGradient(listOf(color, color.copy(alpha = 0.7f))),
+                        glowColor = color,
+                        halo = false
+                    ) {}
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                ExtraKey(Icons.Default.Tune, "Hızlı ayar") { onButton("QMENU") }
+                ExtraKey(Icons.Default.Info, "Bilgi") { onButton("INFO") }
+                ExtraKey(Icons.Default.EventNote, "Rehber") { onButton("GUIDE") }
+                ExtraKey(Icons.AutoMirrored.Filled.ExitToApp, "Çıkış") { onButton("EXIT") }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                ExtraKey(Icons.AutoMirrored.Filled.List, "Kanallar") { onButton("LIST") }
+                ExtraKey(Icons.Default.History, "Son") { onButton("RECENT") }
+                ExtraKey(Icons.Default.AspectRatio, "Oran") { onButton("ASPECT_RATIO") }
+                ExtraKey(Icons.Default.TvOff, "Ekran") { onToggleScreen() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtraKey(icon: ImageVector, label: String, onClick: () -> Unit) {
+    AnimatedIconKey(icon = icon, label = label, onClick = onClick, size = 48.dp, iconSize = 20.dp)
+}
+
+@Composable
+private fun TextInputCard(onSend: (String, Boolean) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val send = {
-        onSend(text)
+        onSend(text, false)
+        text = ""
+    }
+    // Keyboard enter: type the text and confirm it on the TV (e.g. start the search).
+    val submit = {
+        onSend(text, true)
         text = ""
     }
 
@@ -327,7 +396,7 @@ private fun TextInputCard(onSend: (String) -> Unit) {
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { send() }),
+                keyboardActions = KeyboardActions(onSend = { submit() }),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
                     unfocusedBorderColor = SurfaceVariant,

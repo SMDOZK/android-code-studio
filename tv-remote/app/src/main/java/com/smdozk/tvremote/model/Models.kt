@@ -105,5 +105,16 @@ data class Notice(val text: String, val isError: Boolean = false)
 data class DiscoveredTv(
     val host: String,
     val name: String?,
-    val kind: TvKind
+    val kind: TvKind,
+    val uuid: String? = null,
+    val model: String? = null
+)
+
+// The TV we last connected to: found again by uuid after a DHCP change, woken by MAC.
+data class SavedTv(
+    val host: String,
+    val name: String?,
+    val kind: TvKind,
+    val uuid: String?,
+    val macs: List<String>
 )

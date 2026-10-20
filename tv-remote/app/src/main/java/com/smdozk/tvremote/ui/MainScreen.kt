@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
@@ -63,6 +64,7 @@ import com.smdozk.tvremote.ui.screen.RemoteScreen
 import com.smdozk.tvremote.ui.screen.FilesScreen
 import com.smdozk.tvremote.ui.screen.LiveScreen
 import com.smdozk.tvremote.ui.screen.TerminalScreen
+import com.smdozk.tvremote.ui.screen.TouchpadScreen
 import com.smdozk.tvremote.ui.theme.Background
 import com.smdozk.tvremote.ui.theme.Cyan
 import com.smdozk.tvremote.ui.theme.CyanGlow
@@ -72,12 +74,13 @@ import com.smdozk.tvremote.ui.theme.SuccessGreen
 import com.smdozk.tvremote.ui.theme.Surface
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
-private enum class Tab(val label: String, val icon: ImageVector, val adbOnly: Boolean) {
-    Remote("Kumanda", Icons.Default.SettingsRemote, adbOnly = false),
-    Screen("Ekran", Icons.Default.Cast, adbOnly = true),
-    Apps("Uygulama", Icons.Default.Apps, adbOnly = false),
-    Files("Dosya", Icons.Default.Folder, adbOnly = true),
-    Terminal("Terminal", Icons.Default.Terminal, adbOnly = true),
+private enum class Tab(val label: String, val icon: ImageVector, val only: TvKind? = null) {
+    Remote("Kumanda", Icons.Default.SettingsRemote),
+    Touchpad("Fare", Icons.Default.Mouse, only = TvKind.WebOs),
+    Screen("Ekran", Icons.Default.Cast, only = TvKind.Adb),
+    Apps("Uygulama", Icons.Default.Apps),
+    Files("Dosya", Icons.Default.Folder, only = TvKind.Adb),
+    Terminal("Terminal", Icons.Default.Terminal, only = TvKind.Adb),
 }
 
 private val TabSlideSpec = spring(
@@ -89,8 +92,8 @@ private val TabSlideSpec = spring(
 fun MainScreen(vm: MainViewModel) {
     val deviceInfo by vm.deviceInfo.collectAsState()
     val backend by vm.backend.collectAsState()
-    // Mirroring, files and the shell need ADB; webOS only exposes remote and app control.
-    val tabs = remember(backend) { Tab.entries.filter { backend == TvKind.Adb || !it.adbOnly } }
+    // Mirroring, files and the shell need ADB; the pointer touchpad is webOS-only.
+    val tabs = remember(backend) { Tab.entries.filter { it.only == null || it.only == backend } }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     if (selectedTab >= tabs.size) selectedTab = 0
 
@@ -136,6 +139,7 @@ fun MainScreen(vm: MainViewModel) {
         ) { tab ->
             when (tabs.getOrElse(tab) { Tab.Remote }) {
                 Tab.Remote -> RemoteScreen(vm)
+                Tab.Touchpad -> TouchpadScreen(vm)
                 Tab.Screen -> LiveScreen(vm)
                 Tab.Apps -> AppsScreen(vm)
                 Tab.Files -> FilesScreen(vm)

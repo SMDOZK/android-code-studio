@@ -2,6 +2,7 @@ package com.smdozk.tvremote.adb
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import com.smdozk.tvremote.model.TvKind
 import kotlinx.coroutines.Dispatchers
@@ -13,16 +14,26 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import javax.net.SocketFactory
 
 object TvScanner {
 
-    data class Subnet(val address: Int, val prefixLength: Int)
+    data class Subnet(val address: Int, val prefixLength: Int) {
+        val broadcast: String
+            get() {
+                val mask = if (prefixLength == 0) 0 else -1 shl (32 - prefixLength)
+                return toDotted((address and mask) or mask.inv())
+            }
+    }
 
-    fun wifiSubnet(context: Context): Subnet? {
+    // The Wi-Fi (or Ethernet) network the TV lives on, plus our address in it.
+    data class Lan(val network: Network, val subnet: Subnet)
+
+    fun lan(context: Context): Lan? {
         val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return null
         // Not activeNetwork: with a VPN on, that is the tunnel rather than the LAN the TV is on.
         @Suppress("DEPRECATION")
-        val link = connectivity.allNetworks
+        return connectivity.allNetworks
             .filter { network ->
                 val capabilities = connectivity.getNetworkCapabilities(network)
                 capabilities != null && (
@@ -31,10 +42,13 @@ object TvScanner {
                     )
             }
             .firstNotNullOfOrNull { network ->
-                connectivity.getLinkProperties(network)?.linkAddresses?.firstOrNull { it.address is Inet4Address }
-            } ?: return null
-        return Subnet(toInt(link.address.address), link.prefixLength)
+                connectivity.getLinkProperties(network)?.linkAddresses
+                    ?.firstOrNull { it.address is Inet4Address }
+                    ?.let { Lan(network, Subnet(toInt(it.address.address), it.prefixLength)) }
+            }
     }
+
+    fun wifiSubnet(context: Context): Subnet? = lan(context)?.subnet
 
     // Large subnets are clamped to the /24 around the phone so a sweep stays a couple of seconds.
     fun candidateHosts(subnet: Subnet): List<String> {
@@ -48,21 +62,25 @@ object TvScanner {
             .map(::toDotted)
     }
 
-    suspend fun probe(hosts: List<String>, onFound: (host: String, kind: TvKind) -> Unit) = coroutineScope {
+    suspend fun probe(
+        hosts: List<String>,
+        socketFactory: SocketFactory? = null,
+        onFound: (host: String, kind: TvKind) -> Unit
+    ) = coroutineScope {
         val gate = Semaphore(PARALLELISM)
         for (host in hosts) {
             for ((port, kind) in SERVICE_PORTS) {
                 launch(Dispatchers.IO) {
                     gate.withPermit {
-                        if (isOpen(host, port, SCAN_TIMEOUT_MS)) onFound(host, kind)
+                        if (isOpen(host, port, SCAN_TIMEOUT_MS, socketFactory)) onFound(host, kind)
                     }
                 }
             }
         }
     }
 
-    fun isOpen(host: String, port: Int, timeoutMs: Int): Boolean = runCatching {
-        Socket().use { it.connect(InetSocketAddress(host, port), timeoutMs) }
+    fun isOpen(host: String, port: Int, timeoutMs: Int, socketFactory: SocketFactory? = null): Boolean = runCatching {
+        (socketFactory?.createSocket() ?: Socket()).use { it.connect(InetSocketAddress(host, port), timeoutMs) }
     }.isSuccess
 
     fun hostName(host: String): String? = runCatching {

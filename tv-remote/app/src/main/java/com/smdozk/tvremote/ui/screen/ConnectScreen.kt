@@ -36,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Wifi
@@ -72,10 +73,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.ConnectionState
 import com.smdozk.tvremote.model.DiscoveredTv
+import com.smdozk.tvremote.model.SavedTv
 import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.viewmodel.ScanState
 import com.smdozk.tvremote.ui.components.GlassCard
@@ -86,6 +89,7 @@ import com.smdozk.tvremote.ui.theme.GradientCyanPurple
 import com.smdozk.tvremote.ui.theme.OnAccent
 import com.smdozk.tvremote.ui.theme.OnSurface
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
+import com.smdozk.tvremote.ui.theme.PowerRed
 import com.smdozk.tvremote.ui.theme.Purple
 import com.smdozk.tvremote.ui.theme.SurfaceVariant
 import com.smdozk.tvremote.viewmodel.MainViewModel
@@ -94,9 +98,10 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 private val helpSteps = listOf(
-    "Telefon ve TV aynı Wi-Fi ağında olsun; TV'yi yukarıdaki listeden seç ya da IP adresini yaz",
-    "webOS (yeni Sunny modelleri): ayar gerekmez, ilk bağlantıda TV'de çıkan isteği kumandayla onayla",
-    "webOS bağlanmazsa TV ağ/cihaz ayarlarında \"LG Connect Apps\" ya da \"Mobil cihazla TV'yi aç\" varsa aç",
+    "Telefon ve TV aynı Wi-Fi ağında olsun; uygulama TV'yi kendisi bulur ve bağlanır",
+    "webOS (yeni Sunny modelleri): ilk bağlantıda TV'de çıkan isteği kumandayla onayla, sonra hep otomatik bağlanır",
+    "Telefondan açmak için TV ayarlarında \"Wi-Fi ile aç\" / \"Mobil cihazla TV'yi aç\" seçeneğini aç",
+    "Bulunamazsa TV ağ/cihaz ayarlarında \"LG Connect Apps\" varsa aç ya da IP adresini elle yaz",
     "Android TV: Ayarlar → Cihaz Tercihleri → Hakkında → \"Yapı\"ya 7 kez bas, sonra Geliştirici seçenekleri → USB hata ayıklama"
 )
 
@@ -111,6 +116,9 @@ fun ConnectScreen(vm: MainViewModel) {
     val scanState by vm.scanState.collectAsState()
     val pairingPrompt by vm.pairingPrompt.collectAsState()
     val discovered by vm.discovered.collectAsState()
+    val savedTv by vm.savedTv.collectAsState()
+    val status by vm.status.collectAsState()
+    val pendingLink by vm.pendingLink.collectAsState()
 
     val focusManager = LocalFocusManager.current
     val isConnecting = state == ConnectionState.CONNECTING
@@ -119,9 +127,7 @@ fun ConnectScreen(vm: MainViewModel) {
         if (ip.isNotBlank() && !isConnecting) vm.connect(ip, port.toIntOrNull() ?: 5555)
     }
 
-    LaunchedEffect(Unit) {
-        if (vm.shouldAutoScan) vm.scanNetwork()
-    }
+    LaunchedEffect(Unit) { vm.onConnectScreenShown() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AmbientBackground(Modifier.fillMaxSize())
@@ -148,19 +154,34 @@ fun ConnectScreen(vm: MainViewModel) {
                 )
                 Text("Sunny TV · webOS ve Android TV", fontSize = 13.sp, color = OnSurfaceDim)
 
+                AnimatedVisibility(visible = status != null, enter = fadeIn(), exit = fadeOut()) {
+                    Text(
+                        status.orEmpty(),
+                        color = Cyan,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 14.dp)
+                    )
+                }
+
+                pendingLink?.let { link ->
+                    PendingLinkCard(link, onCancel = vm::clearPendingLink, modifier = Modifier.padding(top = 18.dp))
+                }
+
                 Spacer(Modifier.height(28.dp))
 
                 DiscoveryCard(
                     state = scanState,
                     found = discovered,
+                    saved = savedTv,
                     enabled = !isConnecting,
                     onScan = vm::scanNetwork,
                     onPick = { tv ->
                         ip = tv.host
-                        port = "5555"
                         focusManager.clearFocus()
-                        vm.connect(tv.host, 5555)
-                    }
+                        vm.connect(tv)
+                    },
+                    onPowerOn = vm::powerOn
                 )
 
                 Spacer(Modifier.height(14.dp))
@@ -241,13 +262,31 @@ fun ConnectScreen(vm: MainViewModel) {
 }
 
 @Composable
+private fun PendingLinkCard(link: String, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Link, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Bağlanınca TV'de açılacak", color = OnSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(link, color = OnSurfaceDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            TextButton(onClick = onCancel) { Text("Vazgeç", color = OnSurfaceDim) }
+        }
+    }
+}
+
+@Composable
 private fun DiscoveryCard(
     state: ScanState,
     found: List<DiscoveredTv>,
+    saved: SavedTv?,
     enabled: Boolean,
     onScan: () -> Unit,
-    onPick: (DiscoveredTv) -> Unit
+    onPick: (DiscoveredTv) -> Unit,
+    onPowerOn: () -> Unit
 ) {
+    val savedFound = saved != null && found.any { isSameTv(saved, it) }
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -257,7 +296,8 @@ private fun DiscoveryCard(
                     Text("Ağdaki TV'ler", fontWeight = FontWeight.SemiBold, color = OnSurface, fontSize = 15.sp)
                     Text(
                         when {
-                            state == ScanState.Scanning -> "Wi-Fi ağı taranıyor…"
+                            state == ScanState.Scanning && found.isEmpty() -> "Wi-Fi ağında TV aranıyor…"
+                            state == ScanState.Scanning -> "Aranıyor · bağlanmak için TV'ye dokun"
                             state == ScanState.NoWifi -> "Telefon Wi-Fi'ye bağlı değil"
                             state == ScanState.Done && found.isEmpty() -> "Ağda TV bulunamadı"
                             state == ScanState.Done -> "Bağlanmak için TV'ye dokun"
@@ -275,13 +315,51 @@ private fun DiscoveryCard(
                     }
                 }
             }
-            found.forEach { tv -> DiscoveredRow(tv, enabled) { onPick(tv) } }
+            found.forEach { tv ->
+                DiscoveredRow(tv, isLast = saved != null && isSameTv(saved, tv), enabled = enabled) { onPick(tv) }
+            }
+            // The saved TV is not answering: it is probably off, so offer Wake-on-LAN.
+            if (saved != null && saved.macs.isNotEmpty() && !savedFound && state != ScanState.Scanning) {
+                PowerOnRow(saved, enabled, onPowerOn)
+            }
         }
     }
 }
 
+private fun isSameTv(saved: SavedTv, tv: DiscoveredTv): Boolean =
+    if (saved.uuid != null && tv.uuid != null) saved.uuid == tv.uuid else saved.host == tv.host
+
 @Composable
-private fun DiscoveredRow(tv: DiscoveredTv, enabled: Boolean, onClick: () -> Unit) {
+private fun PowerOnRow(saved: SavedTv, enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PowerRed.copy(alpha = 0.10f))
+            .border(1.dp, PowerRed.copy(alpha = 0.35f), shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = PowerRed, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("TV'yi aç", color = OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "${saved.name ?: "Kayıtlı TV"} · ${saved.host}",
+                color = OnSurfaceDim,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = PowerRed)
+    }
+}
+
+@Composable
+private fun DiscoveredRow(tv: DiscoveredTv, isLast: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
@@ -300,12 +378,21 @@ private fun DiscoveredRow(tv: DiscoveredTv, enabled: Boolean, onClick: () -> Uni
                 tv.name ?: if (tv.kind == TvKind.WebOs) "webOS TV" else "Android TV",
                 color = OnSurface,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
-                "${tv.host} · ${if (tv.kind == TvKind.WebOs) "webOS" else "Android (ADB)"}",
-                color = OnSurfaceDim,
-                fontSize = 12.sp
+                listOfNotNull(
+                    tv.host,
+                    tv.model,
+                    if (tv.kind == TvKind.WebOs) "webOS" else "Android (ADB)",
+                    "son bağlanılan".takeIf { isLast }
+                ).joinToString(" · "),
+                color = if (isLast) Cyan else OnSurfaceDim,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Cyan)

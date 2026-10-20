@@ -17,11 +17,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.ConnectException
+import java.net.URI
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import javax.net.SocketFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
@@ -33,10 +35,16 @@ class WebOsPairingException(message: String) : IOException(message)
 data class WebOsApp(val id: String, val title: String, val removable: Boolean)
 
 // LG webOS "SSAP" second-screen protocol: JSON requests over a websocket, buttons over a second socket.
-class WebOsClient(private val host: String, private val onClosed: (Throwable) -> Unit) {
+class WebOsClient(
+    private val host: String,
+    socketFactory: SocketFactory? = null,
+    private val onClosed: (Throwable) -> Unit
+) {
 
-    private val http = buildClient()
+    // socketFactory pins traffic to the Wi-Fi network, so a VPN cannot swallow LAN connections.
+    private val http = buildClient(socketFactory)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
+    private val subscriptions = ConcurrentHashMap<String, (JSONObject) -> Unit>()
     private val ids = AtomicInteger()
     private val pointerLock = Mutex()
 
@@ -95,8 +103,37 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
         }
     }
 
-    suspend fun button(name: String) {
-        val message = "type:button\nname:$name\n\n"
+    // Server-pushed updates: the TV answers once, then again on every change, all with the same id.
+    fun subscribe(uri: String, payload: JSONObject = JSONObject(), onEvent: (JSONObject) -> Unit) {
+        val socket = main ?: return
+        val id = "sub_${ids.incrementAndGet()}"
+        subscriptions[id] = onEvent
+        val message = JSONObject()
+            .put("id", id)
+            .put("type", "subscribe")
+            .put("uri", "ssap://$uri")
+            .put("payload", payload)
+        if (!socket.send(message.toString())) subscriptions.remove(id)
+    }
+
+    // webOS 5+ nests the values in volumeStatus; older firmware sends volume/muted at the top level.
+    fun subscribeVolume(onChange: (volume: Int?, muted: Boolean) -> Unit) = subscribe("audio/getVolume") { payload ->
+        val status = payload.optJSONObject("volumeStatus") ?: payload
+        val volume = status.optInt("volume", -1).takeIf { it >= 0 }
+        val muted = status.optBoolean("muteStatus", status.optBoolean("muted", status.optBoolean("mute", false)))
+        onChange(volume, muted)
+    }
+
+    suspend fun button(name: String) = pointerSend("type:button\nname:$name\n\n")
+
+    // Magic Remote cursor: relative moves in TV pixels, click at the cursor, wheel scroll.
+    suspend fun move(dx: Int, dy: Int) = pointerSend("type:move\ndx:$dx\ndy:$dy\ndown:0\n\n")
+
+    suspend fun click() = pointerSend("type:click\n\n")
+
+    suspend fun scroll(dx: Int, dy: Int) = pointerSend("type:scroll\ndx:$dx\ndy:$dy\n\n")
+
+    private suspend fun pointerSend(message: String) {
         if (!pointerSocket().send(message)) {
             pointer = null
             if (!pointerSocket().send(message)) throw IOException("Kumanda kanalı kapandı")
@@ -105,7 +142,8 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
 
     suspend fun sendKey(keyCode: Int) {
         when (keyCode) {
-            TvKeyCode.POWER -> request("system/turnOff")
+            // After "screen off" the TV is still on; the power key should bring the picture back.
+            TvKeyCode.POWER -> if (powerState() == "Screen Off") setScreen(on = true) else request("system/turnOff")
             TvKeyCode.DEL -> request("com.webos.service.ime/deleteCharacters", JSONObject().put("count", 1))
             // webOS has separate play and pause buttons, so the toggle is tracked here.
             TvKeyCode.MEDIA_PLAY_PAUSE -> {
@@ -118,6 +156,44 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
 
     suspend fun insertText(text: String) {
         request("com.webos.service.ime/insertText", JSONObject().put("text", text).put("replace", 0))
+    }
+
+    suspend fun sendEnter() {
+        request("com.webos.service.ime/sendEnterKey")
+    }
+
+    suspend fun powerState(): String? =
+        runCatching { request("com.webos.service.tvpower/power/getPowerState").optString("state") }.getOrNull()
+
+    // webOS 4.x used a differently named power service for the same call.
+    suspend fun setScreen(on: Boolean) {
+        val call = if (on) "turnOnScreen" else "turnOffScreen"
+        try {
+            request("com.webos.service.tvpower/power/$call")
+        } catch (e: WebOsException) {
+            request("com.webos.service.tv.power/$call")
+        }
+    }
+
+    // MAC addresses for Wake-on-LAN; the TV reports both interfaces, only one is in use.
+    suspend fun macAddresses(): List<String> {
+        val info = request("com.webos.service.connectionmanager/getinfo")
+        return listOf("wifiInfo", "wiredInfo")
+            .mapNotNull { info.optJSONObject(it)?.optString("macAddress") }
+            .map { it.trim().lowercase() }
+            .filter { MAC.matches(it) && it != "00:00:00:00:00:00" }
+            .distinct()
+    }
+
+    // YouTube links open in the TV's YouTube app; anything else in the web browser.
+    suspend fun openUrl(url: String) {
+        val video = youtubeVideoId(url)
+        if (video != null) {
+            val params = JSONObject().put("contentTarget", "https://www.youtube.com/tv?v=$video")
+            val opened = runCatching { request("system.launcher/launch", JSONObject().put("id", YOUTUBE_APP).put("params", params)) }
+            if (opened.isSuccess) return
+        }
+        request("system.launcher/open", JSONObject().put("target", url))
     }
 
     suspend fun launchPoints(): List<WebOsApp> {
@@ -154,6 +230,7 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
 
     fun close() {
         closing = true
+        subscriptions.clear()
         pointer?.close(NORMAL_CLOSURE, null)
         main?.close(NORMAL_CLOSURE, null)
         pointer = null
@@ -219,6 +296,10 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
             }
             return
         }
+        id?.let(subscriptions::get)?.let { onEvent ->
+            if (type != "error") runCatching { onEvent(message.optJSONObject("payload") ?: JSONObject()) }
+            return
+        }
         val waiting = (if (type == "hello") pending[HELLO_ID] else id?.let(pending::get)) ?: return
         if (type == "error") {
             waiting.completeExceptionally(WebOsException(message.optString("error").ifBlank { "TV hata döndürdü" }))
@@ -263,18 +344,40 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
         }
     }
 
-    private companion object {
-        const val WS_PORT = 3000
-        const val WSS_PORT = 3001
-        const val HELLO_ID = "hello"
-        const val REGISTER_ID = "register_0"
-        const val NORMAL_CLOSURE = 1000
-        const val OPEN_TIMEOUT_MS = 4_000L
-        const val HELLO_TIMEOUT_MS = 3_000L
-        const val REQUEST_TIMEOUT_MS = 15_000L
-        const val PAIRING_TIMEOUT_MS = 60_000L
+    companion object {
+        private const val WS_PORT = 3000
+        private const val WSS_PORT = 3001
+        private const val HELLO_ID = "hello"
+        private const val REGISTER_ID = "register_0"
+        private const val NORMAL_CLOSURE = 1000
+        private const val OPEN_TIMEOUT_MS = 4_000L
+        private const val HELLO_TIMEOUT_MS = 3_000L
+        private const val REQUEST_TIMEOUT_MS = 15_000L
+        private const val PAIRING_TIMEOUT_MS = 60_000L
+        private const val YOUTUBE_APP = "youtube.leanback.v4"
+        private val MAC = Regex("^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
-        val BUTTONS = mapOf(
+        fun youtubeVideoId(url: String): String? {
+            val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return null
+            val host = uri.host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") ?: return null
+            val path = uri.path.orEmpty()
+            val id = when {
+                host == "youtu.be" -> path.trim('/').substringBefore('/')
+                host == "youtube.com" || host == "music.youtube.com" -> when {
+                    path == "/watch" -> uri.rawQuery.orEmpty().split('&')
+                        .firstOrNull { it.startsWith("v=") }?.removePrefix("v=")
+                    path.startsWith("/shorts/") || path.startsWith("/live/") || path.startsWith("/embed/") ->
+                        path.split('/').getOrNull(2)
+                    else -> null
+                }
+                else -> null
+            }
+            return id?.takeIf { VIDEO_ID.matches(it) }
+        }
+
+        private val VIDEO_ID = Regex("^[A-Za-z0-9_-]{6,20}$")
+
+        private val BUTTONS = mapOf(
             TvKeyCode.DPAD_UP to "UP",
             TvKeyCode.DPAD_DOWN to "DOWN",
             TvKeyCode.DPAD_LEFT to "LEFT",
@@ -310,7 +413,7 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
         )
 
         // Same payload Home Assistant's aiowebostv sends; the TV shows its own "allow" prompt for it.
-        val REGISTRATION = """
+        private val REGISTRATION = """
             {"type":"register","payload":{"forcePairing":false,"pairingType":"PROMPT","manifest":{
             "appVersion":"1.1","manifestVersion":1,"permissions":[
             "APP_TO_APP","CLOSE","CONTROL_AUDIO","CONTROL_DISPLAY","CONTROL_INPUT_JOYSTICK",
@@ -325,7 +428,7 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
         """.trimIndent()
 
         // webOS serves its websocket with a self-signed certificate; this client only talks to the chosen TV.
-        fun buildClient(): OkHttpClient {
+        private fun buildClient(socketFactory: SocketFactory?): OkHttpClient {
             val trustAll = object : X509TrustManager {
                 override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
                 override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
@@ -340,6 +443,7 @@ class WebOsClient(private val host: String, private val onClosed: (Throwable) ->
                 .connectTimeout(OPEN_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 .readTimeout(0, TimeUnit.MILLISECONDS)
                 .pingInterval(20, TimeUnit.SECONDS)
+                .apply { if (socketFactory != null) socketFactory(socketFactory) }
                 .build()
         }
     }

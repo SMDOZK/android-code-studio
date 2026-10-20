@@ -43,7 +43,8 @@ fun RockerKey(
     downIcon: ImageVector,
     downDescription: String,
     onDown: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    caption: String? = null
 ) {
     Column(
         modifier = modifier
@@ -63,6 +64,9 @@ fun RockerKey(
             color = OnSurfaceDim,
             modifier = Modifier.clearAndSetSemantics { }
         )
+        if (caption != null) {
+            Text(caption, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Cyan)
+        }
         RockerHalf(downIcon, downDescription, onDown, Modifier.weight(1f))
     }
 }
