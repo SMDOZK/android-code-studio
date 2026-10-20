@@ -1,0 +1,3 @@
+-keep class dadb.** { *; }
+-keep class com.smdozk.tvremote.** { *; }
+-dontwarn org.bouncycastle.**
