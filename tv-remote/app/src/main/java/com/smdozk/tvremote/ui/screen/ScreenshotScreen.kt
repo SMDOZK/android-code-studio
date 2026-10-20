@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -22,8 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.smdozk.tvremote.ui.theme.CardColor
-import com.smdozk.tvremote.ui.theme.Cyan
+import com.smdozk.tvremote.ui.components.AnimatedKey
+import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
 import java.io.OutputStream
 
@@ -35,7 +38,10 @@ fun ScreenshotScreen(vm: MainViewModel) {
     var savedMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -43,52 +49,47 @@ fun ScreenshotScreen(vm: MainViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Ekran Görüntüsü", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Cyan)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Ekran Görüntüsü", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Cyan)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 screenshot?.let { bmp ->
-                    IconButton(onClick = {
-                        savedMessage = saveBitmapToGallery(context, bmp)
-                    }) {
-                        Icon(Icons.Default.Save, contentDescription = "Kaydet", tint = Cyan)
+                    AnimatedKey(
+                        onClick = { savedMessage = saveBitmapToGallery(context, bmp) },
+                        size = 44.dp,
+                        backgroundBrush = Brush.radialGradient(listOf(SurfaceVariant, CardColor)),
+                        glowColor = CyanGlow
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = "Kaydet", tint = Cyan, modifier = Modifier.size(20.dp))
                     }
                 }
                 Button(
                     onClick = vm::captureScreenshot,
                     enabled = !isCapturing,
-                    colors = ButtonDefaults.buttonColors(containerColor = Cyan)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Cyan, disabledContainerColor = SurfaceVariant),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     if (isCapturing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = Color.Black,
-                            strokeWidth = 2.dp
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Cyan, strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.Black)
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Yakala", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (isCapturing) "Alınıyor..." else "Yakala",
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold
-                    )
                 }
             }
         }
 
         savedMessage?.let { msg ->
             Spacer(Modifier.height(8.dp))
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (msg.startsWith("Hata")) Color(0x33CF6679) else Color(0x3300BCD4)
-                )
+            val isError = msg.startsWith("Hata")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isError) ErrorColor.copy(alpha = 0.15f) else CyanGlow.copy(alpha = 0.2f))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                Text(
-                    text = msg,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontSize = 12.sp,
-                    color = if (msg.startsWith("Hata")) Color(0xFFCF6679) else Cyan
-                )
+                Text(msg, fontSize = 12.sp, color = if (isError) ErrorColor else Cyan)
             }
             LaunchedEffect(msg) {
                 kotlinx.coroutines.delay(3000)
@@ -102,14 +103,18 @@ fun ScreenshotScreen(vm: MainViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(CardColor, RoundedCornerShape(12.dp)),
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF1A1A38), Color(0xFF0E0E24)))
+                )
+                .border(0.8.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
             when {
                 isCapturing -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Cyan, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(12.dp))
-                    Text("TV ekranı alınıyor...", color = Color.Gray)
+                    CircularProgressIndicator(color = Cyan, modifier = Modifier.size(52.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.height(14.dp))
+                    Text("TV ekranı alınıyor...", color = OnSurfaceDim)
                 }
                 screenshot != null -> Image(
                     bitmap = screenshot!!.asImageBitmap(),
@@ -117,26 +122,24 @@ fun ScreenshotScreen(vm: MainViewModel) {
                     modifier = Modifier.fillMaxSize().padding(8.dp),
                     contentScale = ContentScale.Fit
                 )
-                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Tv,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Ekran görüntüsü almak için\n\"Yakala\" butonuna bas", color = Color.Gray, fontSize = 14.sp)
+                else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(SurfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Tv, contentDescription = null, tint = OnSurfaceDim, modifier = Modifier.size(40.dp))
+                    }
+                    Text("\"Yakala\" butonuna bas", color = OnSurfaceDim, fontSize = 14.sp)
                 }
             }
         }
 
         screenshot?.let {
             Spacer(Modifier.height(8.dp))
-            Text(
-                "Görüntü: ${it.width}×${it.height}px",
-                fontSize = 11.sp,
-                color = Color.Gray
-            )
+            Text("${it.width}×${it.height}px", fontSize = 11.sp, color = OnSurfaceDim)
         }
     }
 }

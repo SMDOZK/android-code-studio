@@ -1,5 +1,6 @@
 package com.smdozk.tvremote.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,29 +11,19 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import com.smdozk.tvremote.ui.screen.AppsScreen
 import com.smdozk.tvremote.ui.screen.RemoteScreen
 import com.smdozk.tvremote.ui.screen.ScreenshotScreen
 import com.smdozk.tvremote.ui.screen.TerminalScreen
-import com.smdozk.tvremote.ui.theme.Cyan
-import com.smdozk.tvremote.ui.theme.Surface
+import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 private data class NavItem(val label: String, val icon: ImageVector)
@@ -51,16 +42,17 @@ fun MainScreen(vm: MainViewModel) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
+        containerColor = Background,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("TV Remote", color = Cyan)
+                        Text("TV Remote", color = Cyan, fontWeight = FontWeight.Bold)
                         deviceInfo?.let {
                             Text(
                                 text = "${it.displayName} · Android ${it.androidVersion}",
-                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                color = androidx.compose.ui.graphics.Color.Gray
+                                style = MaterialTheme.typography.labelSmall,
+                                color = OnSurfaceDim
                             )
                         }
                     }
@@ -70,7 +62,7 @@ fun MainScreen(vm: MainViewModel) {
                         Icon(
                             Icons.AutoMirrored.Filled.ExitToApp,
                             contentDescription = "Bağlantıyı kes",
-                            tint = androidx.compose.ui.graphics.Color.Gray
+                            tint = OnSurfaceDim
                         )
                     }
                 },
@@ -78,13 +70,23 @@ fun MainScreen(vm: MainViewModel) {
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = Surface) {
+            NavigationBar(
+                containerColor = Surface,
+                tonalElevation = 0.dp
+            ) {
                 navItems.forEachIndexed { index, item ->
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label) }
+                        label = { Text(item.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Cyan,
+                            selectedTextColor = Cyan,
+                            indicatorColor = CyanGlow.copy(alpha = 0.3f),
+                            unselectedIconColor = OnSurfaceDim,
+                            unselectedTextColor = OnSurfaceDim
+                        )
                     )
                 }
             }
@@ -93,6 +95,7 @@ fun MainScreen(vm: MainViewModel) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Background)
                 .padding(padding)
         ) {
             when (selectedTab) {

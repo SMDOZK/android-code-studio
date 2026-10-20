@@ -1,6 +1,7 @@
 package com.smdozk.tvremote.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +18,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -26,10 +29,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.TerminalEntry
-import com.smdozk.tvremote.ui.theme.CardColor
-import com.smdozk.tvremote.ui.theme.Cyan
-import com.smdozk.tvremote.ui.theme.ErrorColor
-import com.smdozk.tvremote.ui.theme.SurfaceVariant
+import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 private val quickCommands = listOf(
@@ -67,74 +67,87 @@ fun TerminalScreen(vm: MainViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+    ) {
         // Toolbar
-        Surface(color = CardColor) {
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("ADB Shell", fontSize = 13.sp, color = Cyan, fontWeight = FontWeight.SemiBold)
-                Row {
-                    if (isExecuting) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Cyan, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    IconButton(onClick = vm::clearTerminal, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Temizle", tint = Color.Gray, modifier = Modifier.size(18.dp))
-                    }
+        Row(
+            modifier = Modifier
+                .background(Surface)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(if (isExecuting) Cyan else Color(0xFF4CAF50))
+                )
+                Text("ADB Shell", fontSize = 14.sp, color = Cyan, fontWeight = FontWeight.SemiBold)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isExecuting) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Cyan, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                IconButton(onClick = vm::clearTerminal, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Temizle", tint = OnSurfaceDim, modifier = Modifier.size(18.dp))
                 }
             }
         }
 
-        // Quick commands row
+        // Quick command chips
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             quickCommands.forEach { (label, cmd) ->
                 AssistChip(
                     onClick = { vm.executeCommand(cmd) },
-                    label = { Text(label, fontSize = 11.sp) },
+                    label = { Text(label, fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
                     enabled = !isExecuting,
-                    modifier = Modifier.height(28.dp)
+                    modifier = Modifier.height(28.dp),
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = SurfaceVariant,
+                        labelColor = Cyan
+                    ),
+                    border = AssistChipDefaults.assistChipBorder(
+                        enabled = !isExecuting,
+                        borderColor = CyanGlow
+                    )
                 )
             }
         }
 
-        HorizontalDivider(color = SurfaceVariant)
+        HorizontalDivider(color = SurfaceVariant, thickness = 0.6.dp)
 
-        // Terminal output
+        // Output
         if (history.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Komut girin veya yukarıdaki hızlı komutları kullanın",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
+                Text("Komut girin veya hızlı komutları kullanın", color = OnSurfaceDim, fontSize = 13.sp)
             }
         } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(history) { entry ->
-                    TerminalEntryCard(entry)
-                }
+                items(history) { entry -> TerminalEntryCard(entry) }
             }
         }
 
-        HorizontalDivider(color = SurfaceVariant)
+        HorizontalDivider(color = SurfaceVariant, thickness = 0.6.dp)
 
-        // Input row
+        // Input
         Row(
             modifier = Modifier
-                .background(CardColor)
+                .background(Surface)
                 .padding(8.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -143,13 +156,18 @@ fun TerminalScreen(vm: MainViewModel) {
             OutlinedTextField(
                 value = command,
                 onValueChange = { command = it },
-                placeholder = { Text("komut...", fontFamily = FontFamily.Monospace, fontSize = 13.sp) },
+                placeholder = { Text("komut...", fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = OnSurfaceDim) },
                 modifier = Modifier.weight(1f),
-                textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = OnSurface),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { submit() }),
-                enabled = !isExecuting
+                enabled = !isExecuting,
+                shape = RoundedCornerShape(10.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Cyan,
+                    unfocusedBorderColor = SurfaceVariant
+                )
             )
             Spacer(Modifier.width(8.dp))
             IconButton(
@@ -160,7 +178,7 @@ fun TerminalScreen(vm: MainViewModel) {
                 Icon(
                     Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Gönder",
-                    tint = if (command.isNotBlank()) Cyan else Color.Gray
+                    tint = if (command.isNotBlank()) Cyan else OnSurfaceDim
                 )
             }
         }
@@ -172,23 +190,23 @@ private fun TerminalEntryCard(entry: TerminalEntry) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceVariant, RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF161628), Color(0xFF111122))))
+            .border(0.6.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
             .padding(10.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "$ ${entry.command}",
-                color = Cyan,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        Text(
+            text = "$ ${entry.command}",
+            color = Cyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
         if (entry.output.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = entry.output,
-                color = if (entry.isError) ErrorColor else Color(0xFFB0B0B0),
+                color = if (entry.isError) ErrorColor else Color(0xFF9E9EC8),
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
                 lineHeight = 16.sp

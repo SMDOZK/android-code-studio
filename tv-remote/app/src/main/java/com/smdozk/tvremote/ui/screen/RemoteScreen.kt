@@ -1,5 +1,9 @@
 package com.smdozk.tvremote.ui.screen
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -12,16 +16,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.adb.TvKeyCode
-import com.smdozk.tvremote.ui.theme.CardColor
-import com.smdozk.tvremote.ui.theme.Cyan
-import com.smdozk.tvremote.ui.theme.SurfaceVariant
+import com.smdozk.tvremote.ui.components.AnimatedIconKey
+import com.smdozk.tvremote.ui.components.AnimatedKey
+import com.smdozk.tvremote.ui.components.AnimatedTextKey
+import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 @Composable
@@ -32,84 +42,198 @@ fun RemoteScreen(vm: MainViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Background)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Row 1: Power + Input
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            RemoteIconButton(Icons.Default.PowerSettingsNew, "Güç", tint = Color(0xFFEF5350)) {
-                vm.sendKey(TvKeyCode.POWER)
+        // Top row — power, input, settings, back
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AnimatedIconKey(
+                    icon = Icons.Default.PowerSettingsNew,
+                    label = "Güç",
+                    onClick = { vm.sendKey(TvKeyCode.POWER) },
+                    tint = Color(0xFFFF5252),
+                    glowColor = Color(0x55FF5252)
+                )
+                AnimatedIconKey(
+                    icon = Icons.Default.Input,
+                    label = "Kaynak",
+                    onClick = { vm.sendKey(TvKeyCode.TV_INPUT) },
+                    tint = Cyan,
+                    glowColor = CyanGlow
+                )
+                AnimatedIconKey(
+                    icon = Icons.Default.Settings,
+                    label = "Ayarlar",
+                    onClick = { vm.sendKey(TvKeyCode.SETTINGS) }
+                )
+                AnimatedIconKey(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    label = "Geri",
+                    onClick = { vm.sendKey(TvKeyCode.BACK) }
+                )
             }
-            RemoteIconButton(Icons.Default.Input, "Kaynak") { vm.sendKey(TvKeyCode.TV_INPUT) }
-            RemoteIconButton(Icons.Default.Settings, "Ayarlar") { vm.sendKey(TvKeyCode.SETTINGS) }
-            RemoteIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Geri") { vm.sendKey(TvKeyCode.BACK) }
         }
 
-        HorizontalDivider(color = SurfaceVariant, thickness = 1.dp)
-
-        // Row 2: Home
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+        // Home button
+        AnimatedKey(
+            onClick = { vm.sendKey(TvKeyCode.HOME) },
+            size = 56.dp,
+            backgroundBrush = GradientCyanPurple,
+            glowColor = CyanGlow
         ) {
-            RemoteIconButton(Icons.Default.Home, "Ana Ekran") { vm.sendKey(TvKeyCode.HOME) }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Home, contentDescription = "Ana Ekran", tint = Color.Black, modifier = Modifier.size(22.dp))
+            }
         }
 
         // D-Pad
-        DPad(vm)
+        GlassCard {
+            Box(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .size(220.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                DPadRing()
 
-        HorizontalDivider(color = SurfaceVariant, thickness = 1.dp)
+                // OK center
+                AnimatedKey(
+                    onClick = { vm.sendKey(TvKeyCode.DPAD_CENTER) },
+                    size = 72.dp,
+                    backgroundBrush = GradientCyan,
+                    glowColor = CyanGlow
+                ) {
+                    Text("OK", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 18.sp)
+                }
 
-        // Volume + Mute row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("SES", fontSize = 10.sp, color = Color.Gray)
-                Spacer(Modifier.height(4.dp))
-                RemoteIconButton(Icons.Default.VolumeUp, "+") { vm.sendKey(TvKeyCode.VOLUME_UP) }
-                Spacer(Modifier.height(4.dp))
-                RemoteIconButton(Icons.Default.VolumeDown, "-") { vm.sendKey(TvKeyCode.VOLUME_DOWN) }
+                // Directional arrows
+                IconButton(
+                    onClick = { vm.sendKey(TvKeyCode.DPAD_UP) },
+                    modifier = Modifier.size(56.dp).align(Alignment.TopCenter)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = OnSurface, modifier = Modifier.size(32.dp))
+                }
+                IconButton(
+                    onClick = { vm.sendKey(TvKeyCode.DPAD_DOWN) },
+                    modifier = Modifier.size(56.dp).align(Alignment.BottomCenter)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = OnSurface, modifier = Modifier.size(32.dp))
+                }
+                IconButton(
+                    onClick = { vm.sendKey(TvKeyCode.DPAD_LEFT) },
+                    modifier = Modifier.size(56.dp).align(Alignment.CenterStart)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Sol", tint = OnSurface, modifier = Modifier.size(32.dp))
+                }
+                IconButton(
+                    onClick = { vm.sendKey(TvKeyCode.DPAD_RIGHT) },
+                    modifier = Modifier.size(56.dp).align(Alignment.CenterEnd)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Sağ", tint = OnSurface, modifier = Modifier.size(32.dp))
+                }
             }
-            RemoteIconButton(Icons.Default.VolumeOff, "Sustur") { vm.sendKey(TvKeyCode.VOLUME_MUTE) }
         }
 
-        HorizontalDivider(color = SurfaceVariant, thickness = 1.dp)
+        // Volume + mute
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("SES", fontSize = 10.sp, color = OnSurfaceDim, fontWeight = FontWeight.SemiBold)
+                    AnimatedKey(
+                        onClick = { vm.sendKey(TvKeyCode.VOLUME_UP) },
+                        size = 52.dp,
+                        backgroundBrush = Brush.radialGradient(listOf(Color(0xFF0D2025), CardColor)),
+                        glowColor = CyanGlow
+                    ) {
+                        Icon(Icons.Default.VolumeUp, contentDescription = "+", tint = Cyan, modifier = Modifier.size(22.dp))
+                    }
+                    AnimatedKey(
+                        onClick = { vm.sendKey(TvKeyCode.VOLUME_DOWN) },
+                        size = 52.dp,
+                        backgroundBrush = Brush.radialGradient(listOf(Color(0xFF0D2025), CardColor)),
+                        glowColor = CyanGlow
+                    ) {
+                        Icon(Icons.Default.VolumeDown, contentDescription = "-", tint = CyanDim, modifier = Modifier.size(22.dp))
+                    }
+                }
+                AnimatedIconKey(
+                    icon = Icons.Default.VolumeOff,
+                    label = "Sustur",
+                    onClick = { vm.sendKey(TvKeyCode.VOLUME_MUTE) },
+                    tint = Color(0xFFFFAB40),
+                    glowColor = Color(0x55FFAB40)
+                )
+            }
+        }
 
         // Media controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            RemoteIconButton(Icons.Default.SkipPrevious, "Önceki") { vm.sendKey(TvKeyCode.MEDIA_PREVIOUS) }
-            RemoteIconButton(Icons.Default.Replay10, "Geri sar") { vm.sendKey(TvKeyCode.MEDIA_REWIND) }
-            RemoteIconButton(Icons.Default.PlayArrow, "Oynat/Dur", size = 52.dp, tint = Cyan) {
-                vm.sendKey(TvKeyCode.MEDIA_PLAY_PAUSE)
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AnimatedIconKey(Icons.Default.SkipPrevious, "Önceki", { vm.sendKey(TvKeyCode.MEDIA_PREVIOUS) }, size = 44.dp, iconSize = 18.dp)
+                AnimatedIconKey(Icons.Default.Replay10, "Geri", { vm.sendKey(TvKeyCode.MEDIA_REWIND) }, size = 44.dp, iconSize = 18.dp)
+                AnimatedKey(
+                    onClick = { vm.sendKey(TvKeyCode.MEDIA_PLAY_PAUSE) },
+                    size = 62.dp,
+                    backgroundBrush = GradientCyan,
+                    glowColor = CyanGlow
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Oynat", tint = Color.Black, modifier = Modifier.size(26.dp))
+                }
+                AnimatedIconKey(Icons.Default.Forward10, "İleri", { vm.sendKey(TvKeyCode.MEDIA_FAST_FORWARD) }, size = 44.dp, iconSize = 18.dp)
+                AnimatedIconKey(Icons.Default.SkipNext, "Sonraki", { vm.sendKey(TvKeyCode.MEDIA_NEXT) }, size = 44.dp, iconSize = 18.dp)
             }
-            RemoteIconButton(Icons.Default.Forward10, "İleri sar") { vm.sendKey(TvKeyCode.MEDIA_FAST_FORWARD) }
-            RemoteIconButton(Icons.Default.SkipNext, "Sonraki") { vm.sendKey(TvKeyCode.MEDIA_NEXT) }
         }
 
-        HorizontalDivider(color = SurfaceVariant, thickness = 1.dp)
-
         // Number pad
-        NumberPad(vm)
-
-        HorizontalDivider(color = SurfaceVariant, thickness = 1.dp)
+        GlassCard {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val numRows = listOf(
+                    listOf(1 to TvKeyCode.NUM_1, 2 to TvKeyCode.NUM_2, 3 to TvKeyCode.NUM_3),
+                    listOf(4 to TvKeyCode.NUM_4, 5 to TvKeyCode.NUM_5, 6 to TvKeyCode.NUM_6),
+                    listOf(7 to TvKeyCode.NUM_7, 8 to TvKeyCode.NUM_8, 9 to TvKeyCode.NUM_9),
+                )
+                numRows.forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        row.forEach { (label, keyCode) ->
+                            AnimatedTextKey(label.toString(), { vm.sendKey(keyCode) })
+                        }
+                    }
+                }
+                AnimatedTextKey("0", { vm.sendKey(TvKeyCode.NUM_0) })
+            }
+        }
 
         // Text input
         if (showTextInput) {
-            Card(colors = CardDefaults.cardColors(containerColor = CardColor), modifier = Modifier.fillMaxWidth()) {
+            GlassCard {
                 Row(
-                    Modifier.padding(8.dp),
+                    modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -117,17 +241,20 @@ fun RemoteScreen(vm: MainViewModel) {
                         onValueChange = { inputText = it },
                         placeholder = { Text("Metin gir...") },
                         modifier = Modifier.weight(1f),
-                        singleLine = true
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Cyan,
+                            unfocusedBorderColor = SurfaceVariant
+                        )
                     )
                     Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            vm.inputText(inputText)
-                            inputText = ""
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Cyan)
+                    AnimatedKey(
+                        onClick = { vm.inputText(inputText); inputText = "" },
+                        size = 48.dp,
+                        backgroundBrush = GradientCyan,
+                        glowColor = CyanGlow
                     ) {
-                        Text("Gönder", color = Color.Black)
+                        Icon(Icons.Default.Send, contentDescription = "Gönder", tint = Color.Black, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -135,11 +262,13 @@ fun RemoteScreen(vm: MainViewModel) {
 
         OutlinedButton(
             onClick = { showTextInput = !showTextInput },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.Keyboard, contentDescription = null)
+            Icon(Icons.Default.Keyboard, contentDescription = null, tint = Cyan, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(if (showTextInput) "Klavyeyi Gizle" else "Metin Gir")
+            Text(if (showTextInput) "Klavyeyi Gizle" else "Metin Gir", color = Cyan)
         }
 
         Spacer(Modifier.height(8.dp))
@@ -147,99 +276,47 @@ fun RemoteScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun DPad(vm: MainViewModel) {
-    Box(
-        modifier = Modifier.size(200.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // OK button (center)
-        Button(
-            onClick = { vm.sendKey(TvKeyCode.DPAD_CENTER) },
-            modifier = Modifier.size(64.dp).align(Alignment.Center),
-            shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(containerColor = Cyan),
-            contentPadding = PaddingValues(0.dp)
-        ) {
-            Text("OK", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 16.sp)
-        }
-
-        // Up
-        IconButton(
-            onClick = { vm.sendKey(TvKeyCode.DPAD_UP) },
-            modifier = Modifier.size(52.dp).align(Alignment.TopCenter)
-        ) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Yukarı", tint = Color.White, modifier = Modifier.size(36.dp))
-        }
-
-        // Down
-        IconButton(
-            onClick = { vm.sendKey(TvKeyCode.DPAD_DOWN) },
-            modifier = Modifier.size(52.dp).align(Alignment.BottomCenter)
-        ) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Aşağı", tint = Color.White, modifier = Modifier.size(36.dp))
-        }
-
-        // Left
-        IconButton(
-            onClick = { vm.sendKey(TvKeyCode.DPAD_LEFT) },
-            modifier = Modifier.size(52.dp).align(Alignment.CenterStart)
-        ) {
-            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Sol", tint = Color.White, modifier = Modifier.size(36.dp))
-        }
-
-        // Right
-        IconButton(
-            onClick = { vm.sendKey(TvKeyCode.DPAD_RIGHT) },
-            modifier = Modifier.size(52.dp).align(Alignment.CenterEnd)
-        ) {
-            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Sağ", tint = Color.White, modifier = Modifier.size(36.dp))
-        }
-    }
-}
-
-@Composable
-private fun NumberPad(vm: MainViewModel) {
-    val numKeys = listOf(
-        listOf(1 to TvKeyCode.NUM_1, 2 to TvKeyCode.NUM_2, 3 to TvKeyCode.NUM_3),
-        listOf(4 to TvKeyCode.NUM_4, 5 to TvKeyCode.NUM_5, 6 to TvKeyCode.NUM_6),
-        listOf(7 to TvKeyCode.NUM_7, 8 to TvKeyCode.NUM_8, 9 to TvKeyCode.NUM_9),
+private fun DPadRing() {
+    val infiniteTransition = rememberInfiniteTransition(label = "ring")
+    val ringAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ringAlpha"
     )
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        numKeys.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (label, keyCode) ->
-                    NumButton(label.toString()) { vm.sendKey(keyCode) }
-                }
-            }
-        }
-        NumButton("0") { vm.sendKey(TvKeyCode.NUM_0) }
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val center = Offset(size.width / 2, size.height / 2)
+        val radius = size.minDimension / 2 - 8f
+        drawCircle(
+            color = Cyan.copy(alpha = ringAlpha),
+            radius = radius,
+            center = center,
+            style = Stroke(width = 1.5f, cap = StrokeCap.Round)
+        )
+        drawCircle(
+            color = Cyan.copy(alpha = ringAlpha * 0.5f),
+            radius = radius - 14f,
+            center = center,
+            style = Stroke(width = 0.8f)
+        )
     }
 }
 
 @Composable
-private fun NumButton(label: String, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.size(64.dp),
-        shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(0.dp)
-    ) {
-        Text(label, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun RemoteIconButton(
-    icon: ImageVector,
-    label: String,
-    size: Dp = 48.dp,
-    tint: Color = Color.White,
-    onClick: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick = onClick, modifier = Modifier.size(size)) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(size * 0.55f))
-        }
-        Text(label, fontSize = 9.sp, color = Color.Gray)
-    }
+private fun GlassCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF1A1A38), Color(0xFF111125))
+                )
+            )
+            .border(0.8.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp)),
+        content = content
+    )
 }

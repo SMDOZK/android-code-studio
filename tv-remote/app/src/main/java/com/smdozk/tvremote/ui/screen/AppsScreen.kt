@@ -1,22 +1,25 @@
 package com.smdozk.tvremote.ui.screen
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.AppInfo
-import com.smdozk.tvremote.ui.theme.CardColor
-import com.smdozk.tvremote.ui.theme.Cyan
-import com.smdozk.tvremote.ui.theme.ErrorColor
+import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 @Composable
@@ -32,70 +35,75 @@ fun AppsScreen(vm: MainViewModel) {
         searchQuery.isBlank() || it.packageName.contains(searchQuery, ignoreCase = true)
     }
 
-    LaunchedEffect(Unit) {
-        if (apps.isEmpty()) vm.loadApps()
-    }
+    LaunchedEffect(Unit) { if (apps.isEmpty()) vm.loadApps() }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Toolbar
-        Surface(color = CardColor) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${filtered.size} uygulama",
-                        fontSize = 13.sp,
-                        color = Color.Gray
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Surface)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("${filtered.size} uygulama", fontSize = 13.sp, color = OnSurfaceDim)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("3. taraf", fontSize = 12.sp, color = OnSurfaceDim)
+                    Spacer(Modifier.width(4.dp))
+                    Switch(
+                        checked = thirdPartyOnly,
+                        onCheckedChange = { vm.loadApps(!it.not()) },
+                        modifier = Modifier.height(24.dp),
+                        colors = SwitchDefaults.colors(checkedThumbColor = Cyan, checkedTrackColor = CyanGlow)
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Sadece 3. taraf", fontSize = 12.sp, color = Color.Gray)
-                        Spacer(Modifier.width(4.dp))
-                        Switch(
-                            checked = thirdPartyOnly,
-                            onCheckedChange = { vm.loadApps(!it.not()) },
-                            modifier = Modifier.height(24.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(onClick = { vm.loadApps(thirdPartyOnly) }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Cyan)
-                        }
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = { vm.loadApps(thirdPartyOnly) }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Cyan)
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Uygulama ara...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = null)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Uygulama ara...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = OnSurfaceDim) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = null, tint = OnSurfaceDim)
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Cyan,
+                    unfocusedBorderColor = SurfaceVariant
+                )
+            )
         }
 
         if (isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Cyan)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Uygulamalar yükleniyor...", color = Color.Gray)
+                    CircularProgressIndicator(color = Cyan, strokeWidth = 2.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("Uygulamalar yükleniyor...", color = OnSurfaceDim)
                 }
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(filtered, key = { it.packageName }) { app ->
                     AppItem(
@@ -112,20 +120,16 @@ fun AppsScreen(vm: MainViewModel) {
     uninstallTarget?.let { app ->
         AlertDialog(
             onDismissRequest = { uninstallTarget = null },
-            title = { Text("Uygulamayı Kaldır") },
-            text = { Text("${app.packageName} uygulaması TV'den kaldırılsın mı?") },
+            containerColor = CardColor,
+            title = { Text("Uygulamayı Kaldır", color = OnSurface) },
+            text = { Text("${app.packageName} kaldırılsın mı?", color = OnSurfaceDim) },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.uninstallApp(app.packageName)
-                        uninstallTarget = null
-                    }
-                ) {
+                TextButton(onClick = { vm.uninstallApp(app.packageName); uninstallTarget = null }) {
                     Text("Kaldır", color = ErrorColor)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { uninstallTarget = null }) { Text("İptal") }
+                TextButton(onClick = { uninstallTarget = null }) { Text("İptal", color = Cyan) }
             }
         )
     }
@@ -140,60 +144,57 @@ private fun AppItem(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = CardColor),
-        modifier = Modifier.fillMaxWidth()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF1A1A38), Color(0xFF111125))))
+            .border(0.8.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Android,
-                contentDescription = null,
-                tint = Cyan.copy(alpha = 0.6f),
-                modifier = Modifier.size(32.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(CyanGlow.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Android, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = app.displayName,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = app.packageName,
-                    fontSize = 10.sp,
-                    color = Color.Gray
-                )
+                Text(app.displayName, fontWeight = FontWeight.Medium, fontSize = 13.sp, color = OnSurface)
+                Text(app.packageName, fontSize = 10.sp, color = OnSurfaceDim)
             }
-            // Quick launch
             IconButton(onClick = onLaunch, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Başlat", tint = Cyan)
+                Icon(Icons.Default.PlayArrow, contentDescription = "Başlat", tint = Cyan, modifier = Modifier.size(20.dp))
             }
             IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Daha fazla", tint = Color.Gray)
+                Icon(Icons.Default.MoreVert, contentDescription = "Daha fazla", tint = OnSurfaceDim, modifier = Modifier.size(20.dp))
             }
         }
 
         if (expanded) {
-            HorizontalDivider(color = com.smdozk.tvremote.ui.theme.SurfaceVariant)
+            HorizontalDivider(color = SurfaceVariant, thickness = 0.6.dp)
             Row(
                 Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TextButton(onClick = { onLaunch(); expanded = false }) {
-                    Icon(Icons.Default.Launch, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Launch, contentDescription = null, modifier = Modifier.size(15.dp), tint = Cyan)
                     Spacer(Modifier.width(4.dp))
-                    Text("Başlat", fontSize = 12.sp)
+                    Text("Başlat", fontSize = 12.sp, color = Cyan)
                 }
                 TextButton(onClick = { onStop(); expanded = false }) {
-                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(15.dp), tint = OnSurfaceDim)
                     Spacer(Modifier.width(4.dp))
-                    Text("Durdur", fontSize = 12.sp)
+                    Text("Durdur", fontSize = 12.sp, color = OnSurfaceDim)
                 }
                 TextButton(onClick = { onUninstall(); expanded = false }) {
-                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = ErrorColor)
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = ErrorColor)
                     Spacer(Modifier.width(4.dp))
                     Text("Kaldır", fontSize = 12.sp, color = ErrorColor)
                 }

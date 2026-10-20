@@ -8,14 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.smdozk.tvremote.ui.TvRemoteApp
-import com.smdozk.tvremote.ui.theme.TVRemoteTheme
+import com.smdozk.tvremote.ui.theme.TvRemoteTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            TVRemoteTheme {
+            TvRemoteTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     TvRemoteApp()
                 }

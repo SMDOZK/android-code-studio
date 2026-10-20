@@ -3,37 +3,47 @@ package com.smdozk.tvremote.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-val Cyan = Color(0xFF00BCD4)
-val CyanDark = Color(0xFF0097A7)
-val Background = Color(0xFF0A0A0F)
-val Surface = Color(0xFF13131F)
-val SurfaceVariant = Color(0xFF1C1C2E)
-val CardColor = Color(0xFF1E1E32)
-val OnSurface = Color(0xFFE8E8FF)
-val ErrorColor = Color(0xFFCF6679)
+val Background = Color(0xFF060612)
+val Surface = Color(0xFF0E0E20)
+val SurfaceVariant = Color(0xFF161628)
+val CardColor = Color(0xFF111125)
+val CardColorAlt = Color(0xFF18183A)
 
-private val ColorScheme = darkColorScheme(
+val Cyan = Color(0xFF00E5FF)
+val CyanDim = Color(0xFF00BCD4)
+val CyanGlow = Color(0x5500E5FF)
+val Purple = Color(0xFF7C4DFF)
+val PurpleGlow = Color(0x557C4DFF)
+val ErrorColor = Color(0xFFFF5252)
+val OnSurface = Color(0xFFE0E0FF)
+val OnSurfaceDim = Color(0xFF8888AA)
+
+val GradientCyan = Brush.linearGradient(listOf(Color(0xFF00E5FF), Color(0xFF00B8D4)))
+val GradientPurple = Brush.linearGradient(listOf(Color(0xFF7C4DFF), Color(0xFF448AFF)))
+val GradientCyanPurple = Brush.linearGradient(listOf(Color(0xFF00E5FF), Color(0xFF7C4DFF)))
+val GradientCard = Brush.linearGradient(
+    listOf(Color(0xFF161632), Color(0xFF0E0E24))
+)
+
+private val DarkColorScheme = darkColorScheme(
     primary = Cyan,
-    onPrimary = Color(0xFF003640),
-    primaryContainer = CyanDark,
-    secondary = Color(0xFF90CAF9),
-    onSecondary = Color(0xFF003060),
-    error = ErrorColor,
+    secondary = Purple,
     background = Background,
     surface = Surface,
     surfaceVariant = SurfaceVariant,
+    onPrimary = Color(0xFF001F24),
     onBackground = OnSurface,
     onSurface = OnSurface,
-    onSurfaceVariant = Color(0xFFAAAAAA),
-    outline = Color(0xFF444455),
+    error = ErrorColor
 )
 
 @Composable
-fun TVRemoteTheme(content: @Composable () -> Unit) {
+fun TvRemoteTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = ColorScheme,
+        colorScheme = DarkColorScheme,
         content = content
     )
 }
