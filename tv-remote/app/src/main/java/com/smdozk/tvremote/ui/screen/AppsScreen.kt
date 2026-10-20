@@ -1,5 +1,7 @@
 package com.smdozk.tvremote.ui.screen
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -22,8 +24,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.AppInfo
+import com.smdozk.tvremote.ui.components.GlowButton
+import com.smdozk.tvremote.ui.components.NoticeBanner
+import com.smdozk.tvremote.ui.components.TransferCard
 import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
+
+// Some file managers report APKs as a generic binary type.
+private val APK_MIME_TYPES = arrayOf("application/vnd.android.package-archive", "application/octet-stream")
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -31,12 +39,19 @@ fun AppsScreen(vm: MainViewModel) {
     val apps by vm.apps.collectAsState()
     val isLoading by vm.isLoadingApps.collectAsState()
     val thirdPartyOnly by vm.appsFilter.collectAsState()
+    val install by vm.install.collectAsState()
+    val installNotice by vm.installMessage.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var uninstallTarget by remember { mutableStateOf<AppInfo?>(null) }
+    val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.installApk(uri)
+    }
 
     val filtered = apps.filter {
-        searchQuery.isBlank() || it.packageName.contains(searchQuery, ignoreCase = true)
+        searchQuery.isBlank() ||
+            it.packageName.contains(searchQuery, ignoreCase = true) ||
+            it.displayName.contains(searchQuery, ignoreCase = true)
     }
 
     LaunchedEffect(Unit) { if (apps.isEmpty()) vm.loadApps() }
@@ -93,6 +108,19 @@ fun AppsScreen(vm: MainViewModel) {
                     unfocusedBorderColor = SurfaceVariant
                 )
             )
+            Spacer(Modifier.height(10.dp))
+            GlowButton(
+                text = "Telefondan APK yükle",
+                onClick = { apkPicker.launch(APK_MIME_TYPES) },
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Default.InstallMobile,
+                loading = install != null
+            )
+            install?.let {
+                Spacer(Modifier.height(10.dp))
+                TransferCard(it)
+            }
+            NoticeBanner(installNotice, onDismiss = vm::clearInstallMessage, modifier = Modifier.padding(top = 10.dp))
         }
 
         if (isLoading) {

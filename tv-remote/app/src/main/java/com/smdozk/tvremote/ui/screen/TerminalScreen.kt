@@ -1,8 +1,19 @@
 package com.smdozk.tvremote.ui.screen
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import com.smdozk.tvremote.model.LogLine
+import com.smdozk.tvremote.viewmodel.LogcatController
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,6 +60,192 @@ private val quickCommands = listOf(
 
 @Composable
 fun TerminalScreen(vm: MainViewModel) {
+    var mode by rememberSaveable { mutableIntStateOf(0) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        ModeSwitch(
+            labels = listOf("Shell", "Canlı log"),
+            selected = mode,
+            onSelect = { mode = it },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            if (mode == 0) ShellPanel(vm) else LogPanel(vm.logcat)
+        }
+    }
+}
+
+@Composable
+private fun ModeSwitch(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val position by animateFloatAsState(
+        targetValue = selected.toFloat(),
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 700f),
+        label = "mode"
+    )
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(1.dp, GlassBorderBrush, CircleShape)
+            .padding(4.dp)
+    ) {
+        val segment = maxWidth / labels.size
+        Box(
+            modifier = Modifier
+                .width(segment)
+                .fillMaxHeight()
+                .graphicsLayer { translationX = position * segment.toPx() }
+                .background(GradientCyan, CircleShape)
+        )
+        Row(modifier = Modifier.fillMaxSize()) {
+            labels.forEachIndexed { index, label ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .clickable { onSelect(index) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        color = if (index == selected) OnAccent else OnSurfaceDim,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogPanel(logcat: LogcatController) {
+    val lines by logcat.lines.collectAsState()
+    val running by logcat.isRunning.collectAsState()
+    var filter by rememberSaveable { mutableStateOf("") }
+    var frozen by remember { mutableStateOf<List<LogLine>?>(null) }
+    val listState = rememberLazyListState()
+
+    DisposableEffect(logcat) {
+        logcat.start()
+        onDispose { logcat.stop() }
+    }
+
+    val source = frozen ?: lines
+    val visible = remember(source, filter) {
+        if (filter.isBlank()) source
+        else source.filter { it.tag.contains(filter, ignoreCase = true) || it.message.contains(filter, ignoreCase = true) }
+    }
+    // Follow the tail unless the user has scrolled up to read.
+    val following by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >= info.totalItemsCount - 3
+        }
+    }
+    LaunchedEffect(visible.size) {
+        if (following && visible.isNotEmpty()) listState.scrollToItem(visible.lastIndex)
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = filter,
+                onValueChange = { filter = it },
+                placeholder = { Text("Filtre (etiket veya mesaj)", fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.FilterList, contentDescription = null, tint = OnSurfaceDim) },
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 13.sp, color = OnSurface),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Cyan, unfocusedBorderColor = SurfaceVariant),
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { frozen = if (frozen == null) lines else null }) {
+                Icon(
+                    if (frozen == null) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (frozen == null) "Duraklat" else "Devam et",
+                    tint = Cyan
+                )
+            }
+            IconButton(onClick = {
+                frozen = null
+                logcat.clear()
+            }) {
+                Icon(Icons.Default.DeleteSweep, contentDescription = "Temizle", tint = OnSurfaceDim)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(8.dp).clip(CircleShape)
+                    .background(if (running && frozen == null) Color(0xFF4CAF50) else OnSurfaceDim)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                when {
+                    frozen != null -> "Duraklatıldı"
+                    running -> "Canlı"
+                    else -> "Bağlantı yok"
+                } + " · ${visible.size} satır",
+                color = OnSurfaceDim,
+                fontSize = 11.sp
+            )
+        }
+        HorizontalDivider(color = SurfaceVariant, thickness = 0.6.dp)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            items(visible, key = { it.id }) { line -> LogRow(line) }
+        }
+    }
+}
+
+@Composable
+private fun LogRow(line: LogLine) {
+    val color = when (line.level) {
+        'E', 'F', 'A' -> ErrorColor
+        'W' -> Amber
+        'I' -> Cyan
+        'D' -> OnSurface
+        else -> OnSurfaceDim
+    }
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+        Text(
+            line.level.toString(),
+            color = color,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier.width(14.dp)
+        )
+        Text(
+            text = buildAnnotatedString {
+                if (line.tag.isNotEmpty()) {
+                    withStyle(SpanStyle(color = color)) { append(line.tag) }
+                    append(": ")
+                }
+                append(line.message)
+            },
+            color = Color(0xFFB4B4D8),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            lineHeight = 15.sp
+        )
+    }
+}
+
+@Composable
+private fun ShellPanel(vm: MainViewModel) {
     val history by vm.terminalHistory.collectAsState()
     val isExecuting by vm.isExecuting.collectAsState()
     val listState = rememberLazyListState()

@@ -10,6 +10,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,15 +34,20 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiFind
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.Offset
@@ -67,6 +75,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.ConnectionState
+import com.smdozk.tvremote.model.DiscoveredTv
+import com.smdozk.tvremote.viewmodel.ScanState
 import com.smdozk.tvremote.ui.components.GlassCard
 import com.smdozk.tvremote.ui.components.GlowButton
 import com.smdozk.tvremote.ui.theme.Cyan
@@ -97,11 +107,18 @@ fun ConnectScreen(vm: MainViewModel) {
     var ip by rememberSaveable { mutableStateOf(vm.savedHost) }
     var port by rememberSaveable { mutableStateOf(vm.savedPort.toString()) }
 
+    val scanState by vm.scanState.collectAsState()
+    val discovered by vm.discovered.collectAsState()
+
     val focusManager = LocalFocusManager.current
     val isConnecting = state == ConnectionState.CONNECTING
     val connect = {
         focusManager.clearFocus()
         if (ip.isNotBlank() && !isConnecting) vm.connect(ip, port.toIntOrNull() ?: 5555)
+    }
+
+    LaunchedEffect(Unit) {
+        if (vm.shouldAutoScan) vm.scanNetwork()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -129,7 +146,22 @@ fun ConnectScreen(vm: MainViewModel) {
                 )
                 Text("Sunny TV · ADB WiFi", fontSize = 13.sp, color = OnSurfaceDim)
 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(28.dp))
+
+                DiscoveryCard(
+                    state = scanState,
+                    found = discovered,
+                    enabled = !isConnecting,
+                    onScan = vm::scanNetwork,
+                    onPick = { tv ->
+                        ip = tv.host
+                        port = "5555"
+                        focusManager.clearFocus()
+                        vm.connect(tv.host, 5555)
+                    }
+                )
+
+                Spacer(Modifier.height(14.dp))
 
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -202,6 +234,69 @@ fun ConnectScreen(vm: MainViewModel) {
                 HelpCard()
             }
         }
+    }
+}
+
+@Composable
+private fun DiscoveryCard(
+    state: ScanState,
+    found: List<DiscoveredTv>,
+    enabled: Boolean,
+    onScan: () -> Unit,
+    onPick: (DiscoveredTv) -> Unit
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.WifiFind, contentDescription = null, tint = Cyan, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Ağdaki TV'ler", fontWeight = FontWeight.SemiBold, color = OnSurface, fontSize = 15.sp)
+                    Text(
+                        when {
+                            state == ScanState.Scanning -> "Wi-Fi ağı taranıyor…"
+                            state == ScanState.NoWifi -> "Telefon Wi-Fi'ye bağlı değil"
+                            state == ScanState.Done && found.isEmpty() -> "ADB açık bir TV bulunamadı"
+                            state == ScanState.Done -> "Bağlanmak için TV'ye dokun"
+                            else -> "TV'ni IP yazmadan bul"
+                        },
+                        color = OnSurfaceDim,
+                        fontSize = 12.sp
+                    )
+                }
+                if (state == ScanState.Scanning) {
+                    CircularProgressIndicator(color = Cyan, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                } else {
+                    TextButton(onClick = onScan, enabled = enabled) {
+                        Text(if (state == ScanState.Idle) "Tara" else "Yeniden tara", color = Cyan)
+                    }
+                }
+            }
+            found.forEach { tv -> DiscoveredRow(tv, enabled) { onPick(tv) } }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveredRow(tv: DiscoveredTv, enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Cyan.copy(alpha = 0.08f))
+            .border(1.dp, Cyan.copy(alpha = 0.25f), shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Tv, contentDescription = null, tint = Cyan, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(tv.name ?: "ADB açık cihaz", color = OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text("${tv.host}:5555", color = OnSurfaceDim, fontSize = 12.sp)
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Cyan)
     }
 }
 

@@ -28,7 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Screenshot
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
@@ -57,7 +58,8 @@ import com.smdozk.tvremote.model.DeviceInfo
 import com.smdozk.tvremote.ui.components.RefreshRateBadge
 import com.smdozk.tvremote.ui.screen.AppsScreen
 import com.smdozk.tvremote.ui.screen.RemoteScreen
-import com.smdozk.tvremote.ui.screen.ScreenshotScreen
+import com.smdozk.tvremote.ui.screen.FilesScreen
+import com.smdozk.tvremote.ui.screen.LiveScreen
 import com.smdozk.tvremote.ui.screen.TerminalScreen
 import com.smdozk.tvremote.ui.theme.Background
 import com.smdozk.tvremote.ui.theme.Cyan
@@ -72,9 +74,10 @@ private data class NavItem(val label: String, val icon: ImageVector)
 
 private val navItems = listOf(
     NavItem("Kumanda", Icons.Default.SettingsRemote),
-    NavItem("Uygulamalar", Icons.Default.Apps),
+    NavItem("Ekran", Icons.Default.Cast),
+    NavItem("Uygulama", Icons.Default.Apps),
+    NavItem("Dosya", Icons.Default.Folder),
     NavItem("Terminal", Icons.Default.Terminal),
-    NavItem("Ekran", Icons.Default.Screenshot),
 )
 
 private val TabSlideSpec = spring(
@@ -129,9 +132,10 @@ fun MainScreen(vm: MainViewModel) {
         ) { tab ->
             when (tab) {
                 0 -> RemoteScreen(vm)
-                1 -> AppsScreen(vm)
-                2 -> TerminalScreen(vm)
-                else -> ScreenshotScreen(vm)
+                1 -> LiveScreen(vm)
+                2 -> AppsScreen(vm)
+                3 -> FilesScreen(vm)
+                else -> TerminalScreen(vm)
             }
         }
     }
