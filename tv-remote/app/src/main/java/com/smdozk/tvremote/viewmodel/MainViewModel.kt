@@ -753,6 +753,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         commands.trySend(RemoteCommand.Button(name))
     }
 
+    // Opens LG's Developer Mode app on the TV; it has to be installed from the TV's Content Store first.
+    fun openDeveloperMode() {
+        val tv = webOs ?: return
+        viewModelScope.launch {
+            val app = runCatching { WebOsClient.findDeveloperMode(tv.launchPoints()) }.getOrNull()
+            if (app == null) {
+                _remoteNotice.value = Notice(
+                    "TV'de Developer Mode uygulaması yüklü değil. TV'deki LG Content Store'da \"Developer Mode\" arayıp yükle.",
+                    isError = true
+                )
+                return@launch
+            }
+            runCatching { tv.launch(app.id) }
+                .onSuccess { _remoteNotice.value = Notice("TV'de ${app.title} açıldı") }
+                .onFailure { _remoteNotice.value = Notice("Açılamadı: ${it.message ?: app.title}", isError = true) }
+        }
+    }
+
     fun toggleScreen() {
         val tv = webOs ?: return
         viewModelScope.launch {

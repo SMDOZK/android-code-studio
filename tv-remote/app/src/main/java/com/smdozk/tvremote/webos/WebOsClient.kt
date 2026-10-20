@@ -357,6 +357,13 @@ class WebOsClient(
         private const val YOUTUBE_APP = "youtube.leanback.v4"
         private val MAC = Regex("^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
+        // LG's "Developer Mode" app: installed from the Content Store, id com.palmdts.devmode.
+        fun findDeveloperMode(apps: List<WebOsApp>): WebOsApp? = apps.firstOrNull {
+            it.id.contains("devmode", ignoreCase = true) ||
+                it.title.contains("developer mode", ignoreCase = true) ||
+                it.title.contains("geliştirici", ignoreCase = true)
+        }
+
         fun youtubeVideoId(url: String): String? {
             val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return null
             val host = uri.host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") ?: return null
