@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,7 +50,6 @@ fun AppsScreen(vm: MainViewModel) {
     val installNotice by vm.installMessage.collectAsState()
     val backend by vm.backend.collectAsState()
     val isAdb = backend == TvKind.Adb
-    val remoteNotice by vm.remoteNotice.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var link by remember { mutableStateOf("") }
@@ -150,13 +148,7 @@ fun AppsScreen(vm: MainViewModel) {
             )
             if (!isAdb) {
                 Spacer(Modifier.height(10.dp))
-                GlowButton(
-                    text = "TV'de Geliştirici Modu'nu aç",
-                    onClick = vm::openDeveloperMode,
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Default.DeveloperMode
-                )
-                NoticeBanner(remoteNotice, onDismiss = vm::clearRemoteNotice, modifier = Modifier.padding(top = 10.dp))
+                DeveloperCard(vm)
             }
             // Sideloading needs ADB; webOS only lets a remote launch and close apps.
             if (isAdb) {

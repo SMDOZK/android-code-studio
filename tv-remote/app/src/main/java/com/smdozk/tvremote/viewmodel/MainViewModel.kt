@@ -2,10 +2,12 @@ package com.smdozk.tvremote.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.Surface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -55,6 +57,9 @@ import javax.net.SocketFactory
 import kotlin.math.roundToInt
 
 enum class ScanState { Idle, Scanning, Done, NoWifi }
+
+// Developer Mode on a webOS TV runs an SSH server on port 9922, so an open port means it is on.
+enum class DevState { Unknown, On, Off }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -135,6 +140,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _muted = MutableStateFlow(false)
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
 
+    private val _tvDev = MutableStateFlow(DevState.Unknown)
+    val tvDev: StateFlow<DevState> = _tvDev.asStateFlow()
+
+    private val _phoneDev = MutableStateFlow(phoneDevEnabled())
+    val phoneDev: StateFlow<Boolean> = _phoneDev.asStateFlow()
+
+    private val _devAuto = MutableStateFlow(prefs.getBoolean(KEY_DEV_AUTO, true))
+    val devAuto: StateFlow<Boolean> = _devAuto.asStateFlow()
+
     private val _pendingLink = MutableStateFlow<String?>(null)
     val pendingLink: StateFlow<String?> = _pendingLink.asStateFlow()
 
@@ -148,6 +162,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var webOs: WebOsClient? = null
 
     private var connectJob: Job? = null
+    private var devWatchJob: Job? = null
     private var scanJob: Job? = null
     private var currentHost: String? = null
     private var currentPort: Int = DEFAULT_PORT
@@ -309,7 +324,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             null -> Result.failure(SocketTimeoutException())
         }
 
-    private suspend fun onConnected(host: String, port: Int, kind: TvKind, tv: DiscoveredTv?) {
+    // quiet = silent reconnect after a drop: no pop-ups on the TV or the phone.
+    private suspend fun onConnected(host: String, port: Int, kind: TvKind, tv: DiscoveredTv?, quiet: Boolean = false) {
         currentHost = host
         currentPort = port
         autoConnectArmed = false
@@ -325,9 +341,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             loadAdbInfo()
         }
+        val hadLink = _pendingLink.value != null
         _pendingLink.value?.let { link ->
             _pendingLink.value = null
             openOnTv(link)
+        }
+        developerAssist(kind, autoTv = !quiet && !hadLink, autoPhone = !quiet)
+    }
+
+    private fun phoneDevEnabled(): Boolean = runCatching {
+        Settings.Global.getInt(getApplication<Application>().contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
+    }.getOrDefault(false)
+
+    private suspend fun checkTvDev(): DevState {
+        val host = currentHost ?: return DevState.Unknown
+        val factory = lanSocketFactory()
+        return withContext(Dispatchers.IO) {
+            if (TvScanner.isOpen(host, DEV_SSH_PORT, DEV_CHECK_TIMEOUT_MS, factory)) DevState.On else DevState.Off
+        }
+    }
+
+    fun refreshDevStatus() {
+        _phoneDev.value = phoneDevEnabled()
+        if (webOs == null) return
+        viewModelScope.launch { _tvDev.value = checkTvDev() }
+    }
+
+    fun setDevAuto(on: Boolean) {
+        prefs.edit().putBoolean(KEY_DEV_AUTO, on).apply()
+        _devAuto.value = on
+    }
+
+    // Opens whatever is needed to switch Developer Mode on. Neither side can be switched on by an app:
+    // the TV wants the LG developer login, and Android only lets the user enable developer options.
+    private fun developerAssist(kind: TvKind, autoTv: Boolean, autoPhone: Boolean) {
+        viewModelScope.launch {
+            _phoneDev.value = phoneDevEnabled()
+            if (kind == TvKind.WebOs) _tvDev.value = checkTvDev()
+            if (!_devAuto.value) return@launch
+            if (kind == TvKind.WebOs && autoTv && _tvDev.value == DevState.Off) openDeveloperMode()
+            // The phone screen is shown once per install; after that the Apps tab card has the button.
+            if (autoPhone && !_phoneDev.value && !prefs.getBoolean(KEY_DEV_PHONE_PROMPTED, false)) {
+                prefs.edit().putBoolean(KEY_DEV_PHONE_PROMPTED, true).apply()
+                openPhoneDeveloperSettings()
+            }
+        }
+    }
+
+    fun openPhoneDeveloperSettings() {
+        val app = getApplication<Application>()
+        // The developer screen only exists once the options are on; before that, "About phone" has the build number.
+        val action = if (phoneDevEnabled()) Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS else Settings.ACTION_DEVICE_INFO_SETTINGS
+        val opened = runCatching { app.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        if (!opened) runCatching { app.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
+    // After the Developer Mode app is opened, wait for the user to switch it on at the TV.
+    private fun watchTvDevMode() {
+        devWatchJob?.cancel()
+        devWatchJob = viewModelScope.launch {
+            val started = SystemClock.elapsedRealtime()
+            while (SystemClock.elapsedRealtime() - started < DEV_WATCH_MS) {
+                delay(3_000)
+                if (webOs == null) return@launch
+                if (checkTvDev() == DevState.On) {
+                    _tvDev.value = DevState.On
+                    _remoteNotice.value = Notice("TV'de Developer Mode açıldı ✓")
+                    return@launch
+                }
+            }
         }
     }
 
@@ -479,6 +561,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _inputs.value = null
         _volume.value = null
         _muted.value = false
+        _tvDev.value = DevState.Unknown
+        devWatchJob?.cancel()
         tvSize = null
         files.reset()
         _deviceInfo.value = null
@@ -520,7 +604,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val result = attemptConnect(host, port, null)
                 ensureActive()
                 if (result.isSuccess) {
-                    onConnected(host, port, result.getOrThrow(), null)
+                    onConnected(host, port, result.getOrThrow(), null, quiet = true)
                     return@launch
                 }
             }
@@ -766,7 +850,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             runCatching { tv.launch(app.id) }
-                .onSuccess { _remoteNotice.value = Notice("TV'de ${app.title} açıldı") }
+                .onSuccess {
+                    _remoteNotice.value = Notice("TV'de ${app.title} açıldı: giriş yapıp Dev Mode Status'u aç")
+                    watchTvDevMode()
+                }
                 .onFailure { _remoteNotice.value = Notice("Açılamadı: ${it.message ?: app.title}", isError = true) }
         }
     }
@@ -979,6 +1066,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         connectJob?.cancel()
         scanJob?.cancel()
+        devWatchJob?.cancel()
         mirror.stop()
         logcat.stop()
         webOs?.close()
@@ -994,6 +1082,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_LAST_UUID = "last_tv_uuid"
         const val KEY_LAST_MACS = "last_tv_macs"
         const val KEY_LAST_WEBOS_KEY = "webos_last_key"
+        const val KEY_DEV_AUTO = "dev_auto"
+        const val KEY_DEV_PHONE_PROMPTED = "dev_phone_prompted"
+        const val DEV_SSH_PORT = 9922
+        const val DEV_CHECK_TIMEOUT_MS = 1_200
+        const val DEV_WATCH_MS = 180_000L
         const val DEFAULT_PORT = 5555
         const val MAX_KEY_BATCH = 16
         const val KEYCODE_ENTER = 66
