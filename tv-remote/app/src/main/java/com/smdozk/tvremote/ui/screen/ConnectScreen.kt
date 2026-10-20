@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.ConnectionState
 import com.smdozk.tvremote.model.DiscoveredTv
+import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.viewmodel.ScanState
 import com.smdozk.tvremote.ui.components.GlassCard
 import com.smdozk.tvremote.ui.components.GlowButton
@@ -93,10 +94,10 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 private val helpSteps = listOf(
-    "TV'de Ayarlar → Cihaz Tercihleri → Hakkında → \"Yapı\" satırına 7 kez bas",
-    "Geliştirici seçeneklerinden \"USB hata ayıklama\"yı aç",
-    "TV'nin IP adresini yaz (Ayarlar → Ağ ve İnternet)",
-    "İlk bağlantıda TV ekranındaki izin isteğini onayla"
+    "Telefon ve TV aynı Wi-Fi ağında olsun; TV'yi yukarıdaki listeden seç ya da IP adresini yaz",
+    "webOS (yeni Sunny modelleri): ayar gerekmez, ilk bağlantıda TV'de çıkan isteği kumandayla onayla",
+    "webOS bağlanmazsa TV ağ/cihaz ayarlarında \"LG Connect Apps\" ya da \"Mobil cihazla TV'yi aç\" varsa aç",
+    "Android TV: Ayarlar → Cihaz Tercihleri → Hakkında → \"Yapı\"ya 7 kez bas, sonra Geliştirici seçenekleri → USB hata ayıklama"
 )
 
 @Composable
@@ -108,6 +109,7 @@ fun ConnectScreen(vm: MainViewModel) {
     var port by rememberSaveable { mutableStateOf(vm.savedPort.toString()) }
 
     val scanState by vm.scanState.collectAsState()
+    val pairingPrompt by vm.pairingPrompt.collectAsState()
     val discovered by vm.discovered.collectAsState()
 
     val focusManager = LocalFocusManager.current
@@ -144,7 +146,7 @@ fun ConnectScreen(vm: MainViewModel) {
                     "TV Remote",
                     style = TextStyle(brush = GradientCyanPurple, fontSize = 34.sp, fontWeight = FontWeight.Bold)
                 )
-                Text("Sunny TV · ADB WiFi", fontSize = 13.sp, color = OnSurfaceDim)
+                Text("Sunny TV · webOS ve Android TV", fontSize = 13.sp, color = OnSurfaceDim)
 
                 Spacer(Modifier.height(28.dp))
 
@@ -183,7 +185,7 @@ fun ConnectScreen(vm: MainViewModel) {
                         OutlinedTextField(
                             value = port,
                             onValueChange = { value -> port = value.filter(Char::isDigit).take(5) },
-                            label = { Text("Port") },
+                            label = { Text("ADB portu (yalnızca Android TV)") },
                             leadingIcon = { Icon(Icons.Default.SettingsEthernet, contentDescription = null, tint = Cyan) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                             keyboardActions = KeyboardActions(onGo = { connect() }),
@@ -222,8 +224,9 @@ fun ConnectScreen(vm: MainViewModel) {
 
                 AnimatedVisibility(visible = isConnecting, enter = fadeIn(), exit = fadeOut()) {
                     Text(
-                        "TV ekranında \"USB hata ayıklamaya izin ver\" sorusu çıkarsa onayla.",
-                        color = OnSurfaceDim,
+                        if (pairingPrompt) "TV ekranında bağlantı isteği çıktı: kumandayla onayla."
+                        else "TV ekranında izin sorulursa kumandayla onayla.",
+                        color = if (pairingPrompt) Cyan else OnSurfaceDim,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 12.dp)
@@ -256,7 +259,7 @@ private fun DiscoveryCard(
                         when {
                             state == ScanState.Scanning -> "Wi-Fi ağı taranıyor…"
                             state == ScanState.NoWifi -> "Telefon Wi-Fi'ye bağlı değil"
-                            state == ScanState.Done && found.isEmpty() -> "ADB açık bir TV bulunamadı"
+                            state == ScanState.Done && found.isEmpty() -> "Ağda TV bulunamadı"
                             state == ScanState.Done -> "Bağlanmak için TV'ye dokun"
                             else -> "TV'ni IP yazmadan bul"
                         },
@@ -293,8 +296,17 @@ private fun DiscoveredRow(tv: DiscoveredTv, enabled: Boolean, onClick: () -> Uni
         Icon(Icons.Default.Tv, contentDescription = null, tint = Cyan, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(tv.name ?: "ADB açık cihaz", color = OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text("${tv.host}:5555", color = OnSurfaceDim, fontSize = 12.sp)
+            Text(
+                tv.name ?: if (tv.kind == TvKind.WebOs) "webOS TV" else "Android TV",
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "${tv.host} · ${if (tv.kind == TvKind.WebOs) "webOS" else "Android (ADB)"}",
+                color = OnSurfaceDim,
+                fontSize = 12.sp
+            )
         }
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Cyan)
     }

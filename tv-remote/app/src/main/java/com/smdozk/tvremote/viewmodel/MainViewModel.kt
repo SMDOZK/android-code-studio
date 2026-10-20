@@ -20,7 +20,13 @@ import com.smdozk.tvremote.model.TerminalEntry
 import com.smdozk.tvremote.model.Transfer
 import com.smdozk.tvremote.model.TransferKind
 import com.smdozk.tvremote.model.TransferStage
+import com.smdozk.tvremote.model.TvInput
+import com.smdozk.tvremote.model.TvKind
+import com.smdozk.tvremote.webos.WebOsClient
+import com.smdozk.tvremote.webos.WebOsException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +38,7 @@ import kotlinx.coroutines.withContext
 import okio.Source
 import okio.source
 import java.io.File
+import java.net.SocketTimeoutException
 import kotlin.math.roundToInt
 
 enum class ScanState { Idle, Scanning, Done, NoWifi }
@@ -94,8 +101,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _scanState = MutableStateFlow(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
 
+    private val _backend = MutableStateFlow<TvKind?>(null)
+    val backend: StateFlow<TvKind?> = _backend.asStateFlow()
+
+    private val _pairingPrompt = MutableStateFlow(false)
+    val pairingPrompt: StateFlow<Boolean> = _pairingPrompt.asStateFlow()
+
+    private val _inputs = MutableStateFlow<List<TvInput>?>(null)
+    val inputs: StateFlow<List<TvInput>?> = _inputs.asStateFlow()
+
     @Volatile
     private var tvSize: Pair<Int, Int>? = null
+
+    @Volatile
+    private var webOs: WebOsClient? = null
 
     private sealed interface RemoteCommand {
         data class Key(val code: Int) : RemoteCommand
@@ -112,10 +131,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 val command = carried ?: commands.receive()
                 carried = null
-                val result = when (command) {
-                    is RemoteCommand.Text -> adbManager.inputText(command.text)
-                    is RemoteCommand.Shell -> adbManager.shell(command.command).map { }
-                    is RemoteCommand.Key -> {
+                val tv = webOs
+                val result = when {
+                    tv != null -> when (command) {
+                        is RemoteCommand.Key -> runCatching { tv.sendKey(command.code) }
+                        is RemoteCommand.Text -> runCatching { tv.insertText(command.text) }
+                        is RemoteCommand.Shell -> Result.success(Unit)
+                    }
+                    command is RemoteCommand.Text -> adbManager.inputText(command.text)
+                    command is RemoteCommand.Shell -> adbManager.shell(command.command).map { }
+                    command is RemoteCommand.Key -> {
                         val batch = mutableListOf(command.code)
                         while (batch.size < MAX_KEY_BATCH) {
                             val next = commands.tryReceive().getOrNull() ?: break
@@ -123,8 +148,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         adbManager.sendKeys(batch)
                     }
+                    else -> Result.success(Unit)
                 }
-                result.onFailure(::onConnectionLost)
+                // A webOS error reply (e.g. an unsupported button) leaves the connection intact.
+                result.onFailure { if (it !is WebOsException) onConnectionLost(it) }
             }
         }
     }
@@ -134,12 +161,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.CONNECTING
             _connectionError.value = null
-            adbManager.connect(host, port)
-                .onSuccess {
+            val result = when (detectBackend(host, port)) {
+                TvKind.WebOs -> connectWebOs(host)
+                TvKind.Adb -> adbManager.connect(host, port).map { TvKind.Adb }
+                null -> Result.failure(SocketTimeoutException())
+            }
+            result
+                .onSuccess { kind ->
                     prefs.edit().putString(KEY_HOST, host).putInt(KEY_PORT, port).apply()
+                    _backend.value = kind
                     _connectionState.value = ConnectionState.CONNECTED
-                    adbManager.getDeviceInfo().onSuccess { _deviceInfo.value = it }
-                    adbManager.displaySize().onSuccess { tvSize = it }
+                    if (kind == TvKind.WebOs) loadWebOsInfo() else loadAdbInfo()
                 }
                 .onFailure { e ->
                     _connectionState.value = ConnectionState.ERROR
@@ -148,12 +180,71 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Same IP field for both kinds of TV: whichever service answers decides the protocol.
+    private suspend fun detectBackend(host: String, adbPort: Int): TvKind? = withContext(Dispatchers.IO) {
+        coroutineScope {
+            val plain = async { TvScanner.isOpen(host, TvScanner.WEBOS_PORT, DETECT_TIMEOUT_MS) }
+            val secure = async { TvScanner.isOpen(host, TvScanner.WEBOS_SECURE_PORT, DETECT_TIMEOUT_MS) }
+            val adb = async { TvScanner.isOpen(host, adbPort, DETECT_TIMEOUT_MS) }
+            when {
+                plain.await() || secure.await() -> TvKind.WebOs
+                adb.await() -> TvKind.Adb
+                else -> null
+            }
+        }
+    }
+
+    private suspend fun connectWebOs(host: String): Result<TvKind> {
+        val client = WebOsClient(host) { error -> viewModelScope.launch { onConnectionLost(error) } }
+        return try {
+            val key = client.connect(prefs.getString(webOsKeyFor(host), null)) { _pairingPrompt.value = true }
+            prefs.edit().putString(webOsKeyFor(host), key).apply()
+            webOs = client
+            Result.success(TvKind.WebOs)
+        } catch (e: Throwable) {
+            client.close()
+            Result.failure(e)
+        } finally {
+            _pairingPrompt.value = false
+        }
+    }
+
+    private fun webOsKeyFor(host: String) = "webos_key_$host"
+
+    private suspend fun loadAdbInfo() {
+        adbManager.getDeviceInfo().onSuccess { _deviceInfo.value = it }
+        adbManager.displaySize().onSuccess { tvSize = it }
+    }
+
+    private suspend fun loadWebOsInfo() {
+        val tv = webOs ?: return
+        val software = runCatching { tv.softwareInfo() }.getOrNull()
+        val model = tv.systemInfo?.optString("modelName").orEmpty()
+            .ifBlank { software?.optString("model_name").orEmpty() }
+            .ifBlank { "webOS TV" }
+        // product_name is e.g. "webOSTV 8.0"; major_ver is the firmware version, not the webOS one.
+        val platform = software?.optString("product_name").orEmpty()
+            .replace("webOSTV", "webOS").trim()
+            .ifBlank { "webOS" }
+        _deviceInfo.value = DeviceInfo(
+            model = model,
+            manufacturer = "",
+            androidVersion = "",
+            apiLevel = 0,
+            platform = platform
+        )
+    }
+
     fun disconnect() {
         // Stop the streams first so they end quietly instead of reporting a dropped connection.
         mirror.stop()
         logcat.stop()
+        webOs?.close()
+        webOs = null
         adbManager.disconnect()
         while (commands.tryReceive().isSuccess) Unit
+        _backend.value = null
+        _inputs.value = null
         tvSize = null
         files.reset()
         _connectionState.value = ConnectionState.DISCONNECTED
@@ -183,10 +274,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _discovered.value = emptyList()
         _scanState.value = ScanState.Scanning
         viewModelScope.launch {
-            TvScanner.probe(TvScanner.candidateHosts(subnet), DEFAULT_PORT) { host ->
+            TvScanner.probe(TvScanner.candidateHosts(subnet)) { host, kind ->
+                var added = false
                 _discovered.update { found ->
-                    (found + DiscoveredTv(host, null)).sortedBy { it.host.substringAfterLast('.').toIntOrNull() ?: 0 }
+                    val existing = found.firstOrNull { it.host == host }
+                    when {
+                        existing == null -> {
+                            added = true
+                            (found + DiscoveredTv(host, null, kind)).sortedBy { it.host.substringAfterLast('.').toIntOrNull() ?: 0 }
+                        }
+                        // A webOS port is the more specific signal than a stray ADB port.
+                        kind == TvKind.WebOs && existing.kind != TvKind.WebOs ->
+                            found.map { if (it.host == host) it.copy(kind = TvKind.WebOs) else it }
+                        else -> found
+                    }
                 }
+                if (!added) return@probe
                 viewModelScope.launch(Dispatchers.IO) {
                     TvScanner.hostName(host)?.let { name ->
                         _discovered.update { found -> found.map { if (it.host == host) it.copy(name = name) else it } }
@@ -238,17 +341,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _appsFilter.value = thirdPartyOnly
             _isLoadingApps.value = true
-            adbManager.listPackages(thirdPartyOnly).onSuccess { _apps.value = it }
+            val tv = webOs
+            val result = if (tv != null) {
+                runCatching {
+                    tv.launchPoints()
+                        .filter { !thirdPartyOnly || it.removable }
+                        .map { AppInfo(it.id, isSystem = !it.removable, title = it.title) }
+                        .sortedBy { it.displayName.lowercase() }
+                }
+            } else {
+                adbManager.listPackages(thirdPartyOnly)
+            }
+            result.onSuccess { _apps.value = it }
             _isLoadingApps.value = false
         }
     }
 
     fun launchApp(packageName: String) {
-        viewModelScope.launch { adbManager.launchApp(packageName) }
+        viewModelScope.launch {
+            val tv = webOs
+            if (tv != null) runCatching { tv.launch(packageName) } else adbManager.launchApp(packageName)
+        }
     }
 
     fun stopApp(packageName: String) {
-        viewModelScope.launch { adbManager.stopApp(packageName) }
+        viewModelScope.launch {
+            val tv = webOs
+            if (tv != null) runCatching { tv.closeApp(packageName) } else adbManager.stopApp(packageName)
+        }
+    }
+
+    fun showInputs() {
+        val tv = webOs ?: return
+        viewModelScope.launch {
+            runCatching { tv.inputs() }
+                .onSuccess { _inputs.value = it }
+                // Firmware without the input list API still has the LG input hub button.
+                .onFailure { sendKey(com.smdozk.tvremote.adb.TvKeyCode.TV_INPUT) }
+        }
+    }
+
+    fun switchInput(input: TvInput) {
+        _inputs.value = null
+        val tv = webOs ?: return
+        viewModelScope.launch { runCatching { tv.switchInput(input.id) } }
+    }
+
+    fun dismissInputs() {
+        _inputs.value = null
     }
 
     fun uninstallApp(packageName: String) {
@@ -358,6 +498,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         mirror.stop()
         logcat.stop()
+        webOs?.close()
         adbManager.disconnect()
     }
 
@@ -367,5 +508,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val DEFAULT_PORT = 5555
         const val MAX_KEY_BATCH = 16
         const val MIRROR_LONG_SIDE = 1280
+        const val DETECT_TIMEOUT_MS = 1500
     }
 }

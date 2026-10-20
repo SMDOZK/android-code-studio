@@ -2,9 +2,10 @@ package com.smdozk.tvremote.model
 
 data class AppInfo(
     val packageName: String,
-    val isSystem: Boolean = false
+    val isSystem: Boolean = false,
+    val title: String? = null
 ) {
-    val displayName: String get() = KNOWN_APP_NAMES[packageName] ?: deriveAppName(packageName)
+    val displayName: String get() = title ?: KNOWN_APP_NAMES[packageName] ?: deriveAppName(packageName)
 }
 
 private val KNOWN_APP_NAMES = mapOf(
@@ -45,10 +46,15 @@ data class DeviceInfo(
     val model: String,
     val manufacturer: String,
     val androidVersion: String,
-    val apiLevel: Int
+    val apiLevel: Int,
+    val platform: String = "Android $androidVersion"
 ) {
-    val displayName: String get() = "$manufacturer $model"
+    val displayName: String get() = "$manufacturer $model".trim()
 }
+
+enum class TvKind { WebOs, Adb }
+
+data class TvInput(val id: String, val label: String)
 
 data class TerminalEntry(
     val command: String,
@@ -98,5 +104,6 @@ data class Notice(val text: String, val isError: Boolean = false)
 
 data class DiscoveredTv(
     val host: String,
-    val name: String?
+    val name: String?,
+    val kind: TvKind
 )

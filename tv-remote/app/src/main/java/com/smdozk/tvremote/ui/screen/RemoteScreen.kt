@@ -5,6 +5,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,12 +43,15 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -62,6 +69,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.adb.TvKeyCode
+import com.smdozk.tvremote.model.TvInput
+import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.ui.components.AnimatedIconKey
 import com.smdozk.tvremote.ui.components.AnimatedKey
 import com.smdozk.tvremote.ui.components.AnimatedTextKey
@@ -69,6 +78,7 @@ import com.smdozk.tvremote.ui.components.DPad
 import com.smdozk.tvremote.ui.components.GlassCard
 import com.smdozk.tvremote.ui.components.RockerKey
 import com.smdozk.tvremote.ui.theme.Amber
+import com.smdozk.tvremote.ui.theme.CardColor
 import com.smdozk.tvremote.ui.theme.Cyan
 import com.smdozk.tvremote.ui.theme.GradientCyan
 import com.smdozk.tvremote.ui.theme.GradientCyanPurple
@@ -84,6 +94,8 @@ import com.smdozk.tvremote.viewmodel.MainViewModel
 fun RemoteScreen(vm: MainViewModel) {
     val sendKey: (Int) -> Unit = remember(vm) { { code -> vm.sendKey(code) } }
     var showKeyboard by rememberSaveable { mutableStateOf(false) }
+    val backend by vm.backend.collectAsState()
+    val inputs by vm.inputs.collectAsState()
 
     Column(
         modifier = Modifier
@@ -95,7 +107,11 @@ fun RemoteScreen(vm: MainViewModel) {
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             AnimatedIconKey(Icons.Default.PowerSettingsNew, "Güç", { sendKey(TvKeyCode.POWER) }, tint = PowerRed, glowColor = PowerRed)
-            AnimatedIconKey(Icons.AutoMirrored.Filled.Input, "Kaynak", { sendKey(TvKeyCode.TV_INPUT) })
+            AnimatedIconKey(
+                Icons.AutoMirrored.Filled.Input,
+                "Kaynak",
+                { if (backend == TvKind.WebOs) vm.showInputs() else sendKey(TvKeyCode.TV_INPUT) }
+            )
             AnimatedIconKey(Icons.Default.Settings, "Ayarlar", { sendKey(TvKeyCode.SETTINGS) })
             AnimatedIconKey(Icons.AutoMirrored.Filled.VolumeOff, "Sessiz", { sendKey(TvKeyCode.VOLUME_MUTE) }, tint = Amber, glowColor = Amber)
         }
@@ -141,6 +157,42 @@ fun RemoteScreen(vm: MainViewModel) {
 
         Spacer(Modifier.height(4.dp))
     }
+
+    inputs?.let { list ->
+        InputPicker(inputs = list, onPick = vm::switchInput, onDismiss = vm::dismissInputs)
+    }
+}
+
+@Composable
+private fun InputPicker(inputs: List<TvInput>, onPick: (TvInput) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardColor,
+        title = { Text("Kaynak seç", color = OnSurface) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (inputs.isEmpty()) Text("TV kaynak listesi vermedi.", color = OnSurfaceDim)
+                inputs.forEach { input ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(KeyBrush)
+                            .clickable { onPick(input) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Input, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(input.label, color = OnSurface, fontSize = 15.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Kapat", color = Cyan) }
+        }
+    )
 }
 
 @Composable

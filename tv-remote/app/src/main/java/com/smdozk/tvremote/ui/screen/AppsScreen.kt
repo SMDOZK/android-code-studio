@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.AppInfo
+import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.ui.components.GlowButton
 import com.smdozk.tvremote.ui.components.NoticeBanner
 import com.smdozk.tvremote.ui.components.TransferCard
@@ -41,6 +42,8 @@ fun AppsScreen(vm: MainViewModel) {
     val thirdPartyOnly by vm.appsFilter.collectAsState()
     val install by vm.install.collectAsState()
     val installNotice by vm.installMessage.collectAsState()
+    val backend by vm.backend.collectAsState()
+    val isAdb = backend == TvKind.Adb
 
     var searchQuery by remember { mutableStateOf("") }
     var uninstallTarget by remember { mutableStateOf<AppInfo?>(null) }
@@ -108,19 +111,22 @@ fun AppsScreen(vm: MainViewModel) {
                     unfocusedBorderColor = SurfaceVariant
                 )
             )
-            Spacer(Modifier.height(10.dp))
-            GlowButton(
-                text = "Telefondan APK yükle",
-                onClick = { apkPicker.launch(APK_MIME_TYPES) },
-                modifier = Modifier.fillMaxWidth(),
-                icon = Icons.Default.InstallMobile,
-                loading = install != null
-            )
-            install?.let {
+            // Sideloading needs ADB; webOS only lets a remote launch and close apps.
+            if (isAdb) {
                 Spacer(Modifier.height(10.dp))
-                TransferCard(it)
+                GlowButton(
+                    text = "Telefondan APK yükle",
+                    onClick = { apkPicker.launch(APK_MIME_TYPES) },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Default.InstallMobile,
+                    loading = install != null
+                )
+                install?.let {
+                    Spacer(Modifier.height(10.dp))
+                    TransferCard(it)
+                }
+                NoticeBanner(installNotice, onDismiss = vm::clearInstallMessage, modifier = Modifier.padding(top = 10.dp))
             }
-            NoticeBanner(installNotice, onDismiss = vm::clearInstallMessage, modifier = Modifier.padding(top = 10.dp))
         }
 
         if (isLoading) {
@@ -153,7 +159,7 @@ fun AppsScreen(vm: MainViewModel) {
                         app = app,
                         onLaunch = { vm.launchApp(app.packageName) },
                         onStop = { vm.stopApp(app.packageName) },
-                        onUninstall = { uninstallTarget = app },
+                        onUninstall = if (isAdb) ({ uninstallTarget = app }) else null,
                         modifier = Modifier.animateItemPlacement()
                     )
                 }
@@ -184,7 +190,7 @@ private fun AppItem(
     app: AppInfo,
     onLaunch: () -> Unit,
     onStop: () -> Unit,
-    onUninstall: () -> Unit,
+    onUninstall: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -207,7 +213,10 @@ private fun AppItem(
                     .background(CyanGlow.copy(alpha = 0.3f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Android, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                Text(
+                    app.displayName.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?",
+                    color = Cyan, fontWeight = FontWeight.Bold, fontSize = 16.sp
+                )
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -239,10 +248,12 @@ private fun AppItem(
                         Spacer(Modifier.width(4.dp))
                         Text("Durdur", fontSize = 12.sp, color = OnSurfaceDim)
                     }
-                    TextButton(onClick = { onUninstall(); expanded = false }) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = ErrorColor)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Kaldır", fontSize = 12.sp, color = ErrorColor)
+                    if (onUninstall != null) {
+                        TextButton(onClick = { onUninstall(); expanded = false }) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = ErrorColor)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Kaldır", fontSize = 12.sp, color = ErrorColor)
+                        }
                     }
                 }
             }

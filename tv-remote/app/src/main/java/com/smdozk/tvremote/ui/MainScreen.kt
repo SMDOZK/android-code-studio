@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.DeviceInfo
+import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.ui.components.RefreshRateBadge
 import com.smdozk.tvremote.ui.screen.AppsScreen
 import com.smdozk.tvremote.ui.screen.RemoteScreen
@@ -70,15 +72,13 @@ import com.smdozk.tvremote.ui.theme.SuccessGreen
 import com.smdozk.tvremote.ui.theme.Surface
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
-private data class NavItem(val label: String, val icon: ImageVector)
-
-private val navItems = listOf(
-    NavItem("Kumanda", Icons.Default.SettingsRemote),
-    NavItem("Ekran", Icons.Default.Cast),
-    NavItem("Uygulama", Icons.Default.Apps),
-    NavItem("Dosya", Icons.Default.Folder),
-    NavItem("Terminal", Icons.Default.Terminal),
-)
+private enum class Tab(val label: String, val icon: ImageVector, val adbOnly: Boolean) {
+    Remote("Kumanda", Icons.Default.SettingsRemote, adbOnly = false),
+    Screen("Ekran", Icons.Default.Cast, adbOnly = true),
+    Apps("Uygulama", Icons.Default.Apps, adbOnly = false),
+    Files("Dosya", Icons.Default.Folder, adbOnly = true),
+    Terminal("Terminal", Icons.Default.Terminal, adbOnly = true),
+}
 
 private val TabSlideSpec = spring(
     stiffness = Spring.StiffnessMediumLow,
@@ -88,7 +88,11 @@ private val TabSlideSpec = spring(
 @Composable
 fun MainScreen(vm: MainViewModel) {
     val deviceInfo by vm.deviceInfo.collectAsState()
+    val backend by vm.backend.collectAsState()
+    // Mirroring, files and the shell need ADB; webOS only exposes remote and app control.
+    val tabs = remember(backend) { Tab.entries.filter { backend == TvKind.Adb || !it.adbOnly } }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    if (selectedTab >= tabs.size) selectedTab = 0
 
     Scaffold(
         containerColor = Background,
@@ -97,7 +101,7 @@ fun MainScreen(vm: MainViewModel) {
             Column {
                 Spacer(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
                 NavigationBar(containerColor = Surface, tonalElevation = 0.dp) {
-                    navItems.forEachIndexed { index, item ->
+                    tabs.forEachIndexed { index, item ->
                         NavigationBarItem(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
@@ -130,12 +134,12 @@ fun MainScreen(vm: MainViewModel) {
             },
             label = "tab"
         ) { tab ->
-            when (tab) {
-                0 -> RemoteScreen(vm)
-                1 -> LiveScreen(vm)
-                2 -> AppsScreen(vm)
-                3 -> FilesScreen(vm)
-                else -> TerminalScreen(vm)
+            when (tabs.getOrElse(tab) { Tab.Remote }) {
+                Tab.Remote -> RemoteScreen(vm)
+                Tab.Screen -> LiveScreen(vm)
+                Tab.Apps -> AppsScreen(vm)
+                Tab.Files -> FilesScreen(vm)
+                Tab.Terminal -> TerminalScreen(vm)
             }
         }
     }
@@ -163,7 +167,7 @@ private fun TopBar(deviceInfo: DeviceInfo?, onDisconnect: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = deviceInfo?.let { "Android ${it.androidVersion} · Bağlı" } ?: "Bağlı",
+                text = deviceInfo?.let { "${it.platform} · Bağlı" } ?: "Bağlı",
                 color = OnSurfaceDim,
                 fontSize = 12.sp
             )

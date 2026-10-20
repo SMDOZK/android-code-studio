@@ -11,8 +11,8 @@ android {
         applicationId = "com.smdozk.tvremote"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     buildTypes {
@@ -73,6 +73,9 @@ dependencies {
 
     // ADB protocol library (pure Kotlin/Java, no root required)
     implementation("dev.mobile:dadb:1.2.10")
+
+    // WebSocket client for LG webOS (SSAP) TVs
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

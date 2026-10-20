@@ -3,6 +3,7 @@ package com.smdozk.tvremote.adb
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.smdozk.tvremote.model.TvKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -47,23 +48,22 @@ object TvScanner {
             .map(::toDotted)
     }
 
-    suspend fun probe(
-        hosts: List<String>,
-        port: Int,
-        onFound: (host: String) -> Unit
-    ) = coroutineScope {
+    suspend fun probe(hosts: List<String>, onFound: (host: String, kind: TvKind) -> Unit) = coroutineScope {
         val gate = Semaphore(PARALLELISM)
-        hosts.forEach { host ->
-            launch(Dispatchers.IO) {
-                gate.withPermit {
-                    val open = runCatching {
-                        Socket().use { it.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS) }
-                    }.isSuccess
-                    if (open) onFound(host)
+        for (host in hosts) {
+            for ((port, kind) in SERVICE_PORTS) {
+                launch(Dispatchers.IO) {
+                    gate.withPermit {
+                        if (isOpen(host, port, SCAN_TIMEOUT_MS)) onFound(host, kind)
+                    }
                 }
             }
         }
     }
+
+    fun isOpen(host: String, port: Int, timeoutMs: Int): Boolean = runCatching {
+        Socket().use { it.connect(InetSocketAddress(host, port), timeoutMs) }
+    }.isSuccess
 
     fun hostName(host: String): String? = runCatching {
         InetAddress.getByName(host).canonicalHostName.takeIf { it != host }
@@ -75,6 +75,10 @@ object TvScanner {
     internal fun toDotted(value: Int): String =
         "${value ushr 24 and 0xFF}.${value ushr 16 and 0xFF}.${value ushr 8 and 0xFF}.${value and 0xFF}"
 
-    private const val PARALLELISM = 64
-    private const val CONNECT_TIMEOUT_MS = 400
+    const val WEBOS_PORT = 3000
+    const val WEBOS_SECURE_PORT = 3001
+    private const val ADB_PORT = 5555
+    private val SERVICE_PORTS = listOf(WEBOS_PORT to TvKind.WebOs, WEBOS_SECURE_PORT to TvKind.WebOs, ADB_PORT to TvKind.Adb)
+    private const val PARALLELISM = 96
+    private const val SCAN_TIMEOUT_MS = 350
 }
