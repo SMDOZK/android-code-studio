@@ -5,20 +5,41 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
 import android.provider.MediaStore
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -26,145 +47,144 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.ui.components.AnimatedKey
-import com.smdozk.tvremote.ui.theme.*
+import com.smdozk.tvremote.ui.components.GlassCard
+import com.smdozk.tvremote.ui.components.GlowButton
+import com.smdozk.tvremote.ui.theme.Cyan
+import com.smdozk.tvremote.ui.theme.ErrorColor
+import com.smdozk.tvremote.ui.theme.OnSurface
+import com.smdozk.tvremote.ui.theme.OnSurfaceDim
+import com.smdozk.tvremote.ui.theme.SurfaceVariant
 import com.smdozk.tvremote.viewmodel.MainViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.OutputStream
 
 @Composable
 fun ScreenshotScreen(vm: MainViewModel) {
     val screenshot by vm.screenshot.collectAsState()
     val isCapturing by vm.isCapturing.collectAsState()
+    val captureError by vm.screenshotError.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var savedMessage by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(savedMessage) {
+        if (savedMessage != null) {
+            delay(3000)
+            savedMessage = null
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Ekran Görüntüsü", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Cyan)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                screenshot?.let { bmp ->
-                    AnimatedKey(
-                        onClick = { savedMessage = saveBitmapToGallery(context, bmp) },
-                        size = 44.dp,
-                        backgroundBrush = Brush.radialGradient(listOf(SurfaceVariant, CardColor)),
-                        glowColor = CyanGlow
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = "Kaydet", tint = Cyan, modifier = Modifier.size(20.dp))
-                    }
-                }
-                Button(
-                    onClick = vm::captureScreenshot,
-                    enabled = !isCapturing,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Cyan, disabledContainerColor = SurfaceVariant),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    if (isCapturing) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Cyan, strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Yakala", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Ekran Görüntüsü", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnSurface)
+                Text(
+                    screenshot?.let { "${it.width}×${it.height} px" } ?: "TV ekranını anında yakala",
+                    fontSize = 12.sp,
+                    color = OnSurfaceDim
+                )
             }
+            screenshot?.let { bitmap ->
+                AnimatedKey(
+                    onClick = {
+                        isSaving = true
+                        scope.launch {
+                            savedMessage = saveBitmapToGallery(context, bitmap)
+                            isSaving = false
+                        }
+                    },
+                    modifier = Modifier.size(48.dp),
+                    enabled = !isSaving
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(color = Cyan, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    } else {
+                        Icon(Icons.Default.Save, contentDescription = "Galeriye kaydet", tint = Cyan, modifier = Modifier.size(22.dp))
+                    }
+                }
+                Spacer(Modifier.size(10.dp))
+            }
+            GlowButton(
+                text = "Yakala",
+                onClick = vm::captureScreenshot,
+                icon = Icons.Default.CameraAlt,
+                loading = isCapturing
+            )
         }
 
-        savedMessage?.let { msg ->
-            Spacer(Modifier.height(8.dp))
-            val isError = msg.startsWith("Hata")
-            Box(
+        val message = savedMessage ?: captureError?.let { "Hata: $it" }
+        AnimatedVisibility(visible = message != null, enter = fadeIn(), exit = fadeOut()) {
+            val isError = message?.startsWith("Hata") == true
+            Text(
+                text = message.orEmpty(),
+                fontSize = 12.sp,
+                color = if (isError) ErrorColor else Cyan,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isError) ErrorColor.copy(alpha = 0.15f) else CyanGlow.copy(alpha = 0.2f))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Text(msg, fontSize = 12.sp, color = if (isError) ErrorColor else Cyan)
-            }
-            LaunchedEffect(msg) {
-                kotlinx.coroutines.delay(3000)
-                savedMessage = null
-            }
+                    .background((if (isError) ErrorColor else Cyan).copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 9.dp)
+            )
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.linearGradient(listOf(Color(0xFF1A1A38), Color(0xFF0E0E24)))
-                )
-                .border(0.8.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            when {
-                isCapturing -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Cyan, modifier = Modifier.size(52.dp), strokeWidth = 3.dp)
-                    Spacer(Modifier.height(14.dp))
-                    Text("TV ekranı alınıyor...", color = OnSurfaceDim)
-                }
-                screenshot != null -> Image(
-                    bitmap = screenshot!!.asImageBitmap(),
-                    contentDescription = "TV ekran görüntüsü",
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    contentScale = ContentScale.Fit
-                )
-                else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(SurfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Tv, contentDescription = null, tint = OnSurfaceDim, modifier = Modifier.size(40.dp))
+        GlassCard(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Crossfade(targetState = screenshot, label = "screenshot", modifier = Modifier.fillMaxSize()) { bitmap ->
+                Box(modifier = Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.Center) {
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "TV ekran görüntüsü",
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Box(
+                                modifier = Modifier.size(84.dp).background(SurfaceVariant, RoundedCornerShape(24.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Tv, contentDescription = null, tint = OnSurfaceDim, modifier = Modifier.size(40.dp))
+                            }
+                            Text("\"Yakala\" ile TV ekranını al", color = OnSurfaceDim, fontSize = 14.sp)
+                        }
                     }
-                    Text("\"Yakala\" butonuna bas", color = OnSurfaceDim, fontSize = 14.sp)
+                    if (isCapturing) {
+                        CircularProgressIndicator(color = Cyan, strokeWidth = 3.dp, modifier = Modifier.size(52.dp))
+                    }
                 }
             }
-        }
-
-        screenshot?.let {
-            Spacer(Modifier.height(8.dp))
-            Text("${it.width}×${it.height}px", fontSize = 11.sp, color = OnSurfaceDim)
         }
     }
 }
 
-private fun saveBitmapToGallery(context: Context, bitmap: Bitmap): String {
-    return try {
+// PNG-encoding a 4K frame takes ~1s, so it must stay off the main thread.
+private suspend fun saveBitmapToGallery(context: Context, bitmap: Bitmap): String = withContext(Dispatchers.IO) {
+    try {
         val filename = "tv_screenshot_${System.currentTimeMillis()}.png"
-        val outputStream: OutputStream?
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val outputStream: OutputStream? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                 put(MediaStore.Images.Media.MIME_TYPE, "image/png")
                 put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/TVRemote")
             }
             val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            outputStream = uri?.let { context.contentResolver.openOutputStream(it) }
+            uri?.let { context.contentResolver.openOutputStream(it) }
         } else {
             @Suppress("DEPRECATION")
             val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES)
-            val file = java.io.File(dir, filename)
-            outputStream = java.io.FileOutputStream(file)
+            java.io.FileOutputStream(java.io.File(dir, filename))
         }
 
-        outputStream?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        if (outputStream == null) return@withContext "Hata: galeri dosyası oluşturulamadı"
+        outputStream.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         "Galeriye kaydedildi: $filename"
     } catch (e: Exception) {
         "Hata: ${e.message}"

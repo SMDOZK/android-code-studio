@@ -27,6 +27,9 @@ object TvKeyCode {
     const val MEDIA_FAST_FORWARD = 90
 
     const val TV_INPUT = 178
+    const val CHANNEL_UP = 166
+    const val CHANNEL_DOWN = 167
+    const val DEL = 67
 
     const val NUM_0 = 7
     const val NUM_1 = 8

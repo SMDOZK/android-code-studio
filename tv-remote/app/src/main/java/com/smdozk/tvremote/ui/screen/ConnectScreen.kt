@@ -1,258 +1,325 @@
 package com.smdozk.tvremote.ui.screen
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.ConnectionState
-import com.smdozk.tvremote.ui.theme.*
+import com.smdozk.tvremote.ui.components.GlassCard
+import com.smdozk.tvremote.ui.components.GlowButton
+import com.smdozk.tvremote.ui.theme.Cyan
+import com.smdozk.tvremote.ui.theme.ErrorColor
+import com.smdozk.tvremote.ui.theme.GradientCyanPurple
+import com.smdozk.tvremote.ui.theme.OnAccent
+import com.smdozk.tvremote.ui.theme.OnSurface
+import com.smdozk.tvremote.ui.theme.OnSurfaceDim
+import com.smdozk.tvremote.ui.theme.Purple
+import com.smdozk.tvremote.ui.theme.SurfaceVariant
 import com.smdozk.tvremote.viewmodel.MainViewModel
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+
+private val helpSteps = listOf(
+    "TV'de Ayarlar → Cihaz Tercihleri → Hakkında → \"Yapı\" satırına 7 kez bas",
+    "Geliştirici seçeneklerinden \"USB hata ayıklama\"yı aç",
+    "TV'nin IP adresini yaz (Ayarlar → Ağ ve İnternet)",
+    "İlk bağlantıda TV ekranındaki izin isteğini onayla"
+)
 
 @Composable
 fun ConnectScreen(vm: MainViewModel) {
     val state by vm.connectionState.collectAsState()
     val error by vm.connectionError.collectAsState()
 
-    var ip by rememberSaveable { mutableStateOf("192.168.1.") }
-    var port by rememberSaveable { mutableStateOf("5555") }
+    var ip by rememberSaveable { mutableStateOf(vm.savedHost) }
+    var port by rememberSaveable { mutableStateOf(vm.savedPort.toString()) }
 
     val focusManager = LocalFocusManager.current
     val isConnecting = state == ConnectionState.CONNECTING
+    val connect = {
+        focusManager.clearFocus()
+        if (ip.isNotBlank() && !isConnecting) vm.connect(ip, port.toIntOrNull() ?: 5555)
+    }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "bg")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulse"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.12f,
-        targetValue = 0.28f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulseAlpha"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-    ) {
-        // Ambient glow background
-        Box(
-            modifier = Modifier
-                .size(320.dp)
-                .align(Alignment.TopCenter)
-                .offset(y = 40.dp)
-                .scale(pulseScale)
-                .background(
-                    Brush.radialGradient(
-                        listOf(Cyan.copy(alpha = pulseAlpha), Color.Transparent)
-                    ),
-                    CircleShape
-                )
-        )
-
-        Column(
+    Box(modifier = Modifier.fillMaxSize()) {
+        AmbientBackground(Modifier.fillMaxSize())
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .systemBarsPadding()
+                .imePadding()
         ) {
-            // TV Icon with ring
-            Box(contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .scale(if (isConnecting) pulseScale else 1f)
-                        .background(
-                            Brush.radialGradient(listOf(CyanGlow, Color.Transparent)),
-                            CircleShape
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                HeroBadge(connecting = isConnecting)
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "TV Remote",
+                    style = TextStyle(brush = GradientCyanPurple, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                )
+                Text("Sunny TV · ADB WiFi", fontSize = 13.sp, color = OnSurfaceDim)
+
+                Spacer(Modifier.height(32.dp))
+
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("Bağlantı", fontWeight = FontWeight.SemiBold, color = OnSurface, fontSize = 15.sp)
+                        OutlinedTextField(
+                            value = ip,
+                            onValueChange = { ip = it },
+                            label = { Text("TV IP adresi") },
+                            placeholder = { Text("192.168.1.100") },
+                            leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null, tint = Cyan) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
+                            singleLine = true,
+                            enabled = !isConnecting,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = fieldColors(),
+                            modifier = Modifier.fillMaxWidth()
                         )
-                )
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(GradientCyanPurple)
-                ) {
-                    Icon(
-                        Icons.Default.Tv,
-                        contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(36.dp).align(Alignment.Center)
-                    )
+                        OutlinedTextField(
+                            value = port,
+                            onValueChange = { value -> port = value.filter(Char::isDigit).take(5) },
+                            label = { Text("Port") },
+                            leadingIcon = { Icon(Icons.Default.SettingsEthernet, contentDescription = null, tint = Cyan) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                            keyboardActions = KeyboardActions(onGo = { connect() }),
+                            singleLine = true,
+                            enabled = !isConnecting,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = fieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
-            }
 
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                "TV Remote",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = Cyan
-            )
-            Text(
-                "Sunny TV · ADB WiFi",
-                fontSize = 13.sp,
-                color = OnSurfaceDim
-            )
-
-            Spacer(Modifier.height(36.dp))
-
-            // Glass card for inputs
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF1A1A38), Color(0xFF111125))))
-                    .border(0.8.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(24.dp))
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text("Bağlantı Ayarları", fontWeight = FontWeight.SemiBold, color = Cyan, fontSize = 15.sp)
-
-                OutlinedTextField(
-                    value = ip,
-                    onValueChange = { ip = it },
-                    label = { Text("TV IP Adresi") },
-                    placeholder = { Text("192.168.1.100") },
-                    leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null, tint = Cyan) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isConnecting,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Cyan,
-                        unfocusedBorderColor = SurfaceVariant,
-                        focusedLabelColor = Cyan
-                    )
-                )
-
-                OutlinedTextField(
-                    value = port,
-                    onValueChange = { port = it },
-                    label = { Text("Port") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        focusManager.clearFocus()
-                        if (!isConnecting) vm.connect(ip, port.toIntOrNull() ?: 5555)
-                    }),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isConnecting,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Cyan,
-                        unfocusedBorderColor = SurfaceVariant,
-                        focusedLabelColor = Cyan
-                    )
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            AnimatedVisibility(visible = isConnecting) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Cyan, modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.height(8.dp))
+                AnimatedVisibility(visible = error != null && !isConnecting, enter = fadeIn(), exit = fadeOut()) {
                     Text(
-                        "Bağlanıyor... TV'de ADB yetkilendirme isteğini kabul edin.",
-                        fontSize = 12.sp,
-                        color = OnSurfaceDim,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-                }
-            }
-
-            AnimatedVisibility(visible = error != null && !isConnecting) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ErrorColor.copy(alpha = 0.12f)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Hata: $error",
+                        text = error.orEmpty(),
                         color = ErrorColor,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .padding(top = 14.dp)
+                            .fillMaxWidth()
+                            .background(ErrorColor.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                GlowButton(
+                    text = if (isConnecting) "Bağlanıyor…" else "Bağlan",
+                    onClick = connect,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Default.Link,
+                    enabled = ip.isNotBlank(),
+                    loading = isConnecting
+                )
+
+                AnimatedVisibility(visible = isConnecting, enter = fadeIn(), exit = fadeOut()) {
+                    Text(
+                        "TV ekranında \"USB hata ayıklamaya izin ver\" sorusu çıkarsa onayla.",
+                        color = OnSurfaceDim,
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(12.dp)
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(28.dp))
+                HelpCard()
+            }
+        }
+    }
+}
+
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Cyan,
+    unfocusedBorderColor = SurfaceVariant,
+    focusedLabelColor = Cyan,
+    cursorColor = Cyan
+)
+
+@Composable
+private fun AmbientBackground(modifier: Modifier) {
+    val transition = rememberInfiniteTransition(label = "ambient")
+    val phase = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)),
+        label = "phase"
+    )
+    Spacer(
+        modifier
+            // Phase is read only while drawing this layer: the screen itself never recomposes per frame.
+            .graphicsLayer()
+            .drawBehind {
+                val t = phase.value * 2f * PI.toFloat()
+                val w = size.width
+                val h = size.height
+                val cyanCenter = Offset(w * (0.28f + 0.10f * cos(t)), h * (0.20f + 0.05f * sin(t)))
+                val purpleCenter = Offset(w * (0.78f + 0.08f * sin(t)), h * (0.72f + 0.06f * cos(t)))
+                drawCircle(
+                    Brush.radialGradient(listOf(Cyan.copy(alpha = 0.16f), Color.Transparent), cyanCenter, w * 0.8f),
+                    radius = w * 0.8f,
+                    center = cyanCenter
+                )
+                drawCircle(
+                    Brush.radialGradient(listOf(Purple.copy(alpha = 0.15f), Color.Transparent), purpleCenter, w * 0.85f),
+                    radius = w * 0.85f,
+                    center = purpleCenter
+                )
+            }
+    )
+}
+
+@Composable
+private fun HeroBadge(connecting: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(120.dp)
+            .drawBehind {
+                drawCircle(
+                    Brush.radialGradient(listOf(Cyan.copy(alpha = 0.30f), Color.Transparent)),
+                    radius = size.minDimension / 2f
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(visible = connecting, enter = fadeIn(), exit = fadeOut()) {
+            SpinningRing(Modifier.size(108.dp))
+        }
+        Box(
+            modifier = Modifier
+                .size(78.dp)
+                .background(GradientCyanPurple, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Tv, contentDescription = null, tint = OnAccent, modifier = Modifier.size(38.dp))
+        }
+    }
+}
+
+@Composable
+private fun SpinningRing(modifier: Modifier) {
+    val transition = rememberInfiniteTransition(label = "spin")
+    val angle = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart),
+        label = "angle"
+    )
+    Spacer(
+        modifier
+            .graphicsLayer()
+            .drawBehind {
+                val stroke = 3.dp.toPx()
+                rotate(angle.value) {
+                    drawArc(
+                        brush = Brush.sweepGradient(listOf(Color.Transparent, Cyan, Purple, Color.Transparent)),
+                        startAngle = 0f,
+                        sweepAngle = 300f,
+                        useCenter = false,
+                        topLeft = Offset(stroke / 2f, stroke / 2f),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(width = stroke, cap = StrokeCap.Round)
                     )
                 }
             }
+    )
+}
 
-            Spacer(Modifier.height(16.dp))
-
-            // Connect button
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (!isConnecting && ip.isNotBlank()) GradientCyan else Brush.linearGradient(listOf(SurfaceVariant, SurfaceVariant)))
-                    .then(
-                        if (!isConnecting && ip.isNotBlank()) Modifier
-                        else Modifier
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Button(
-                    onClick = { vm.connect(ip, port.toIntOrNull() ?: 5555) },
-                    enabled = !isConnecting && ip.isNotBlank(),
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent,
-                        disabledContainerColor = SurfaceVariant
-                    ),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("Bağlan", color = if (!isConnecting && ip.isNotBlank()) Color.Black else OnSurfaceDim, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+@Composable
+private fun HelpCard() {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Nasıl bağlanılır?", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Cyan)
+            helpSteps.forEachIndexed { index, step ->
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(Cyan.copy(alpha = 0.14f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("${index + 1}", color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(step, color = OnSurfaceDim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 2.dp))
                 }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // Instructions
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceVariant.copy(alpha = 0.5f))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text("Nasıl bağlanılır?", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Cyan)
-                Text("1. TV Ayarlar → Geliştirici Seçenekleri'ni aç", fontSize = 11.sp, color = OnSurfaceDim)
-                Text("2. ADB / USB Hata Ayıklama'yı etkinleştir", fontSize = 11.sp, color = OnSurfaceDim)
-                Text("3. TV IP adresini gir (Ayarlar → Ağ)", fontSize = 11.sp, color = OnSurfaceDim)
-                Text("4. İlk bağlantıda TV'de yetkilendirmeyi onayla", fontSize = 11.sp, color = OnSurfaceDim)
             }
         }
     }

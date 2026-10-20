@@ -1,5 +1,7 @@
 package com.smdozk.tvremote.ui.screen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -7,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +25,7 @@ import com.smdozk.tvremote.model.AppInfo
 import com.smdozk.tvremote.ui.theme.*
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppsScreen(vm: MainViewModel) {
     val apps by vm.apps.collectAsState()
@@ -58,7 +62,7 @@ fun AppsScreen(vm: MainViewModel) {
                     Spacer(Modifier.width(4.dp))
                     Switch(
                         checked = thirdPartyOnly,
-                        onCheckedChange = { vm.loadApps(!it.not()) },
+                        onCheckedChange = { vm.loadApps(it) },
                         modifier = Modifier.height(24.dp),
                         colors = SwitchDefaults.colors(checkedThumbColor = Cyan, checkedTrackColor = CyanGlow)
                     )
@@ -99,6 +103,17 @@ fun AppsScreen(vm: MainViewModel) {
                     Text("Uygulamalar yükleniyor...", color = OnSurfaceDim)
                 }
             }
+        } else if (filtered.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.Apps, contentDescription = null, tint = OnSurfaceDim, modifier = Modifier.size(44.dp))
+                    Text(
+                        if (searchQuery.isBlank()) "Uygulama bulunamadı" else "\"$searchQuery\" ile eşleşen uygulama yok",
+                        color = OnSurfaceDim,
+                        fontSize = 14.sp
+                    )
+                }
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -110,7 +125,8 @@ fun AppsScreen(vm: MainViewModel) {
                         app = app,
                         onLaunch = { vm.launchApp(app.packageName) },
                         onStop = { vm.stopApp(app.packageName) },
-                        onUninstall = { uninstallTarget = app }
+                        onUninstall = { uninstallTarget = app },
+                        modifier = Modifier.animateItemPlacement()
                     )
                 }
             }
@@ -140,12 +156,13 @@ private fun AppItem(
     app: AppInfo,
     onLaunch: () -> Unit,
     onStop: () -> Unit,
-    onUninstall: () -> Unit
+    onUninstall: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF1A1A38), Color(0xFF111125))))
@@ -177,26 +194,28 @@ private fun AppItem(
             }
         }
 
-        if (expanded) {
-            HorizontalDivider(color = SurfaceVariant, thickness = 0.6.dp)
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                TextButton(onClick = { onLaunch(); expanded = false }) {
-                    Icon(Icons.Default.Launch, contentDescription = null, modifier = Modifier.size(15.dp), tint = Cyan)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Başlat", fontSize = 12.sp, color = Cyan)
-                }
-                TextButton(onClick = { onStop(); expanded = false }) {
-                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(15.dp), tint = OnSurfaceDim)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Durdur", fontSize = 12.sp, color = OnSurfaceDim)
-                }
-                TextButton(onClick = { onUninstall(); expanded = false }) {
-                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = ErrorColor)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Kaldır", fontSize = 12.sp, color = ErrorColor)
+        AnimatedVisibility(visible = expanded) {
+            Column {
+                HorizontalDivider(color = SurfaceVariant, thickness = 0.6.dp)
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(onClick = { onLaunch(); expanded = false }) {
+                        Icon(Icons.AutoMirrored.Filled.Launch, contentDescription = null, modifier = Modifier.size(15.dp), tint = Cyan)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Başlat", fontSize = 12.sp, color = Cyan)
+                    }
+                    TextButton(onClick = { onStop(); expanded = false }) {
+                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(15.dp), tint = OnSurfaceDim)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Durdur", fontSize = 12.sp, color = OnSurfaceDim)
+                    }
+                    TextButton(onClick = { onUninstall(); expanded = false }) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = ErrorColor)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Kaldır", fontSize = 12.sp, color = ErrorColor)
+                    }
                 }
             }
         }

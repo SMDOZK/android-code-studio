@@ -12,173 +12,126 @@ import java.io.File
 
 class AdbManager(private val filesDir: File) {
 
+    @Volatile
     private var dadb: Dadb? = null
     private var keyPair: AdbKeyPair? = null
 
-    val isConnected: Boolean get() = dadb != null
-
     private fun getOrCreateKeyPair(): AdbKeyPair {
         keyPair?.let { return it }
-        val keyFile = File(filesDir, "adbkey")
-        return if (keyFile.exists()) {
-            AdbKeyPair.read(keyFile)
-        } else {
-            AdbKeyPair.generate(keyFile)
-        }.also { keyPair = it }
+        val privateKey = File(filesDir, "adbkey")
+        val publicKey = File(filesDir, "adbkey.pub")
+        // The TV can only show its "allow debugging" prompt if we can send the public key.
+        if (!privateKey.exists() || !publicKey.exists()) {
+            AdbKeyPair.generate(privateKey, publicKey)
+        }
+        return AdbKeyPair.read(privateKey, publicKey).also { keyPair = it }
     }
 
     suspend fun connect(host: String, port: Int = 5555): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            dadb?.close()
-            dadb = null
-            val kp = getOrCreateKeyPair()
-            val connection = Dadb.create(host, port, kp)
-            val test = connection.shell("echo __ok__")
-            if (test.output.contains("__ok__")) {
-                dadb = connection
-                Result.success(Unit)
-            } else {
+        disconnect()
+        runCatching {
+            // No socket timeout: the handshake blocks until the user accepts the prompt on the TV.
+            val connection = Dadb.create(host, port, getOrCreateKeyPair(), connectTimeout = CONNECT_TIMEOUT_MS)
+            try {
+                check(connection.shell("echo __ok__").output.contains("__ok__")) { "Bağlantı testi başarısız" }
+            } catch (e: Throwable) {
                 connection.close()
-                Result.failure(Exception("Bağlantı testi başarısız"))
+                throw e
             }
-        } catch (e: Exception) {
-            dadb = null
-            Result.failure(e)
+            dadb = connection
         }
     }
 
     fun disconnect() {
-        try { dadb?.close() } catch (_: Exception) {}
+        val current = dadb
         dadb = null
+        runCatching { current?.close() }
     }
 
-    suspend fun sendKey(keyCode: Int): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            require().shell("input keyevent $keyCode")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend fun sendKeys(keyCodes: List<Int>): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { require().shell("input keyevent ${keyCodes.joinToString(" ")}") }.map { }
     }
 
     suspend fun shell(command: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
+        runCatching {
             val result = require().shell(command)
-            val output = if (result.errorOutput.isNotBlank() && result.exitCode != 0) {
+            if (result.errorOutput.isNotBlank() && result.exitCode != 0) {
                 "HATA: ${result.errorOutput}\n${result.output}"
             } else {
                 result.output
             }
-            Result.success(output)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun listPackages(thirdPartyOnly: Boolean = true): Result<List<AppInfo>> = withContext(Dispatchers.IO) {
-        try {
+        runCatching {
             val flag = if (thirdPartyOnly) "-3" else ""
-            val result = require().shell("pm list packages $flag")
-            val packages = result.output.trim().split("\n")
+            require().shell("pm list packages $flag").output.lineSequence()
+                .map { it.trim() }
                 .filter { it.startsWith("package:") }
-                .map { line ->
-                    val pkg = line.removePrefix("package:").trim()
-                    AppInfo(packageName = pkg, isSystem = !thirdPartyOnly)
-                }
+                .map { AppInfo(packageName = it.removePrefix("package:"), isSystem = !thirdPartyOnly) }
                 .sortedBy { it.packageName }
-            Result.success(packages)
-        } catch (e: Exception) {
-            Result.failure(e)
+                .toList()
         }
     }
 
     suspend fun launchApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            require().shell("monkey -p $packageName -c android.intent.category.LAUNCHER 1")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { require().shell("monkey -p $packageName -c android.intent.category.LAUNCHER 1") }.map { }
     }
 
     suspend fun stopApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            require().shell("am force-stop $packageName")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { require().shell("am force-stop $packageName") }.map { }
     }
 
     suspend fun uninstallApp(packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            require().shell("pm uninstall $packageName")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { require().shell("pm uninstall $packageName") }.map { }
     }
 
     suspend fun installApk(apkFile: File): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            require().install(apkFile)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { require().install(apkFile) }
     }
 
-    suspend fun screenshot(cacheDir: File): Result<Bitmap> = withContext(Dispatchers.IO) {
-        try {
-            val adb = require()
-            val remotePath = "/sdcard/.tvremote_tmp.png"
-            adb.shell("screencap -p $remotePath")
-
-            val localFile = File(cacheDir, "tv_screen_${System.currentTimeMillis()}.png")
-            adb.pull(remotePath, localFile)
-            adb.shell("rm -f $remotePath")
-
-            val bitmap = BitmapFactory.decodeFile(localFile.absolutePath)
-            localFile.delete()
-
-            bitmap?.let { Result.success(it) }
-                ?: Result.failure(Exception("Görüntü çözümlenemedi"))
-        } catch (e: Exception) {
-            Result.failure(e)
+    suspend fun screenshot(): Result<Bitmap> = withContext(Dispatchers.IO) {
+        runCatching {
+            // exec: streams raw stdout, so the PNG arrives without a temp file on the TV.
+            val png = require().open("exec:screencap -p").use { it.source.readByteArray() }
+            val bitmap = BitmapFactory.decodeByteArray(png, 0, png.size) ?: error("Görüntü çözümlenemedi")
+            // Uploads the texture now, off the UI thread, instead of on the first frame that draws it.
+            bitmap.prepareToDraw()
+            bitmap
         }
     }
 
     suspend fun getDeviceInfo(): Result<DeviceInfo> = withContext(Dispatchers.IO) {
-        try {
-            val adb = require()
-            val model = adb.shell("getprop ro.product.model").output.trim()
-            val manufacturer = adb.shell("getprop ro.product.manufacturer").output.trim()
-            val androidVersion = adb.shell("getprop ro.build.version.release").output.trim()
-            val apiLevel = adb.shell("getprop ro.build.version.sdk").output.trim().toIntOrNull() ?: 0
-            Result.success(DeviceInfo(model, manufacturer, androidVersion, apiLevel))
-        } catch (e: Exception) {
-            Result.failure(e)
+        runCatching {
+            val props = require().shell(
+                "getprop ro.product.manufacturer; getprop ro.product.model; " +
+                    "getprop ro.build.version.release; getprop ro.build.version.sdk"
+            ).output.lines().map { it.trim() }
+            DeviceInfo(
+                manufacturer = props.getOrElse(0) { "" },
+                model = props.getOrElse(1) { "" },
+                androidVersion = props.getOrElse(2) { "" },
+                apiLevel = props.getOrNull(3)?.toIntOrNull() ?: 0
+            )
         }
     }
 
     suspend fun pushFile(localFile: File, remotePath: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            require().push(localFile, remotePath)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { require().push(localFile, remotePath) }
     }
 
     suspend fun inputText(text: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val escaped = text.replace(" ", "%s").replace("'", "\\'")
+        runCatching {
+            // Close-escape-reopen keeps quotes inside the single-quoted shell argument; `input` reads %s as space.
+            val escaped = text.replace("'", "'\\''").replace(" ", "%s")
             require().shell("input text '$escaped'")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        }.map { }
     }
 
     private fun require(): Dadb = dadb ?: throw IllegalStateException("TV'ye bağlı değil")
+
+    private companion object {
+        const val CONNECT_TIMEOUT_MS = 5_000
+    }
 }
