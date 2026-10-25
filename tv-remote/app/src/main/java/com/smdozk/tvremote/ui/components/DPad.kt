@@ -45,6 +45,9 @@ import com.smdozk.tvremote.ui.theme.Cyan
 import com.smdozk.tvremote.ui.theme.GradientCyan
 import com.smdozk.tvremote.ui.theme.OnAccent
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
+import com.smdozk.tvremote.ui.theme.Ink
+import com.smdozk.tvremote.ui.theme.Palette
+import com.smdozk.tvremote.ui.theme.ShadowColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
@@ -131,9 +134,16 @@ fun DPad(onKey: (Int) -> Unit, modifier: Modifier = Modifier) {
                         radius = size.minDimension / 2f
                     )
                     val disc = Brush.radialGradient(
-                        listOf(Color(0xFF242450), Color(0xFF14142E), Color(0xFF0E0E22)),
+                        Palette.dpadDisc,
                         center = c,
                         radius = outer
+                    )
+                    val shadow = ShadowColor
+                    val drop = Brush.radialGradient(
+                        0.86f to shadow,
+                        1f to Color.Transparent,
+                        center = c + Offset(0f, 6.dp.toPx()),
+                        radius = outer * 1.08f
                     )
                     val segmentGlow = Brush.radialGradient(
                         INNER_RATIO to Color.Transparent,
@@ -163,13 +173,14 @@ fun DPad(onKey: (Int) -> Unit, modifier: Modifier = Modifier) {
 
                     onDrawBehind {
                         drawCircle(bloom, radius = size.minDimension / 2f, center = c)
+                        if (shadow.alpha > 0f) drawCircle(drop, radius = outer * 1.08f, center = c + Offset(0f, 6.dp.toPx()))
                         drawCircle(disc, radius = outer, center = c)
-                        drawCircle(Color.White.copy(alpha = 0.08f), radius = outer - hairline / 2f, center = c, style = Stroke(hairline))
+                        drawCircle(Ink(0.08f), radius = outer - hairline / 2f, center = c, style = Stroke(hairline))
                         drawCircle(Cyan.copy(alpha = 0.10f), radius = inner, center = c, style = Stroke(hairline))
                         for (k in 0 until 4) {
                             val a = Math.toRadians(45.0 + 90.0 * k)
                             val unit = Offset(cos(a).toFloat(), sin(a).toFloat())
-                            drawLine(Color.White.copy(alpha = 0.05f), c + unit * dividerStart, c + unit * dividerEnd, hairline)
+                            drawLine(Ink(0.05f), c + unit * dividerStart, c + unit * dividerEnd, hairline)
                         }
                         DPadDirection.entries.forEach { dir ->
                             val g = glows[dir.ordinal].value.coerceIn(0f, 1f)

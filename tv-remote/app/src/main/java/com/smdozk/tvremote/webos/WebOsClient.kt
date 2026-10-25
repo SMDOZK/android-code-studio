@@ -54,6 +54,7 @@ class WebOsClient(
     @Volatile private var onPrompt: (() -> Unit)? = null
     @Volatile private var closing = false
     private var playing = true
+    @Volatile private var settingsApp: String? = null
 
     var systemInfo: JSONObject? = null
         private set
@@ -150,9 +151,48 @@ class WebOsClient(
                 button(if (playing) "PAUSE" else "PLAY")
                 playing = !playing
             }
+            TvKeyCode.SETTINGS -> openSettings()
             else -> button(BUTTONS[keyCode] ?: return)
         }
     }
+
+    // Some webOS builds (Sunny among them) ignore the MENU button sent over the network, so the
+    // settings app itself is launched. Its id differs between builds: fall back to the TV's app list.
+    suspend fun openSettings() {
+        settingsApp?.let { if (tryLaunch(it)) return }
+        if (tryLaunch(SETTINGS_APP)) {
+            settingsApp = SETTINGS_APP
+            return
+        }
+        val others = runCatchingWebOs { installedApps() }.orEmpty().let(::findSettingsApps).filter { it.id != SETTINGS_APP }
+        for (app in others) {
+            if (tryLaunch(app.id)) {
+                settingsApp = app.id
+                return
+            }
+        }
+        button("MENU")
+    }
+
+    // Every installed app, including system ones that have no launcher tile (like Settings).
+    suspend fun installedApps(): List<WebOsApp> {
+        val apps = request("com.webos.applicationManager/listApps").optJSONArray("apps") ?: JSONArray()
+        return (0 until apps.length()).mapNotNull { index ->
+            val app = apps.optJSONObject(index) ?: return@mapNotNull null
+            val id = app.optString("id").ifBlank { return@mapNotNull null }
+            WebOsApp(id, app.optString("title").ifBlank { id }, app.optBoolean("removable"))
+        }
+    }
+
+    private suspend fun tryLaunch(appId: String): Boolean = runCatchingWebOs { launch(appId) } != null
+
+    // Only a refusal from the TV means "try something else"; a dropped connection still propagates.
+    private inline fun <T> runCatchingWebOs(block: () -> T): T? =
+        try {
+            block()
+        } catch (e: WebOsException) {
+            null
+        }
 
     suspend fun insertText(text: String) {
         request("com.webos.service.ime/insertText", JSONObject().put("text", text).put("replace", 0))
@@ -384,6 +424,20 @@ class WebOsClient(
 
         private val VIDEO_ID = Regex("^[A-Za-z0-9_-]{6,20}$")
 
+        const val SETTINGS_APP = "com.palm.app.settings"
+        private val SETTINGS_TITLE = Regex("^(tüm |all )?(ayarlar|settings)$", RegexOption.IGNORE_CASE)
+
+        // Settings-looking apps, the plainest "Ayarlar"/"Settings" first.
+        fun findSettingsApps(apps: List<WebOsApp>): List<WebOsApp> =
+            apps.filter { SETTINGS_TITLE.matches(it.title.trim()) || it.id.contains("setting", ignoreCase = true) }
+                .sortedBy {
+                    when {
+                        SETTINGS_TITLE.matches(it.title.trim()) -> 0
+                        it.id.endsWith(".settings", ignoreCase = true) -> 1
+                        else -> 2
+                    }
+                }
+
         private val BUTTONS = mapOf(
             TvKeyCode.DPAD_UP to "UP",
             TvKeyCode.DPAD_DOWN to "DOWN",
@@ -393,7 +447,6 @@ class WebOsClient(
             TvKeyCode.BACK to "BACK",
             TvKeyCode.HOME to "HOME",
             TvKeyCode.MENU to "MENU",
-            TvKeyCode.SETTINGS to "MENU",
             TvKeyCode.TV_INPUT to "INPUT_HUB",
             TvKeyCode.VOLUME_UP to "VOLUMEUP",
             TvKeyCode.VOLUME_DOWN to "VOLUMEDOWN",

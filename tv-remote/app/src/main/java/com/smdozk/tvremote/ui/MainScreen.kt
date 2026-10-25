@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.DeviceInfo
 import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.ui.components.RefreshRateBadge
+import com.smdozk.tvremote.ui.components.ThemeToggle
 import com.smdozk.tvremote.ui.screen.AppsScreen
 import com.smdozk.tvremote.ui.screen.RemoteScreen
 import com.smdozk.tvremote.ui.screen.FilesScreen
@@ -72,6 +73,7 @@ import com.smdozk.tvremote.ui.theme.OnSurface
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
 import com.smdozk.tvremote.ui.theme.SuccessGreen
 import com.smdozk.tvremote.ui.theme.Surface
+import com.smdozk.tvremote.ui.theme.Ink
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 private enum class Tab(val label: String, val icon: ImageVector, val only: TvKind? = null) {
@@ -99,10 +101,10 @@ fun MainScreen(vm: MainViewModel) {
 
     Scaffold(
         containerColor = Background,
-        topBar = { TopBar(deviceInfo, onDisconnect = vm::disconnect) },
+        topBar = { TopBar(deviceInfo, onDisconnect = vm::disconnect, onTheme = vm::setLightTheme) },
         bottomBar = {
             Column {
-                Spacer(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
+                Spacer(Modifier.fillMaxWidth().height(1.dp).background(Ink(0.05f)))
                 NavigationBar(containerColor = Surface, tonalElevation = 0.dp) {
                     tabs.forEachIndexed { index, item ->
                         NavigationBarItem(
@@ -150,7 +152,7 @@ fun MainScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun TopBar(deviceInfo: DeviceInfo?, onDisconnect: () -> Unit) {
+private fun TopBar(deviceInfo: DeviceInfo?, onDisconnect: () -> Unit, onTheme: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -177,6 +179,7 @@ private fun TopBar(deviceInfo: DeviceInfo?, onDisconnect: () -> Unit) {
             )
         }
         RefreshRateBadge()
+        ThemeToggle(onTheme)
         IconButton(onClick = onDisconnect) {
             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Bağlantıyı kes", tint = OnSurfaceDim)
         }

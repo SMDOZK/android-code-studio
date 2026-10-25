@@ -31,6 +31,7 @@ import com.smdozk.tvremote.ui.theme.KeyBorderBrush
 import com.smdozk.tvremote.ui.theme.KeyBrush
 import com.smdozk.tvremote.ui.theme.OnSurface
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
+import com.smdozk.tvremote.ui.theme.softShadow
 
 private val CapsuleShape = RoundedCornerShape(percent = 50)
 
@@ -50,6 +51,7 @@ fun RockerKey(
         modifier = modifier
             .width(72.dp)
             .height(196.dp)
+            .softShadow(CapsuleShape)
             .clip(CapsuleShape)
             .background(KeyBrush)
             .border(1.dp, KeyBorderBrush, CapsuleShape),

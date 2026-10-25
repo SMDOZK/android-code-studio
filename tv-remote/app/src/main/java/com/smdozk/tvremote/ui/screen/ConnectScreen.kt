@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -83,6 +84,7 @@ import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.viewmodel.ScanState
 import com.smdozk.tvremote.ui.components.GlassCard
 import com.smdozk.tvremote.ui.components.GlowButton
+import com.smdozk.tvremote.ui.components.ThemeToggle
 import com.smdozk.tvremote.ui.theme.Cyan
 import com.smdozk.tvremote.ui.theme.ErrorColor
 import com.smdozk.tvremote.ui.theme.GradientCyanPurple
@@ -92,6 +94,7 @@ import com.smdozk.tvremote.ui.theme.OnSurfaceDim
 import com.smdozk.tvremote.ui.theme.PowerRed
 import com.smdozk.tvremote.ui.theme.Purple
 import com.smdozk.tvremote.ui.theme.SurfaceVariant
+import com.smdozk.tvremote.ui.theme.Palette
 import com.smdozk.tvremote.viewmodel.MainViewModel
 import kotlin.math.PI
 import kotlin.math.cos
@@ -258,6 +261,13 @@ fun ConnectScreen(vm: MainViewModel) {
                 HelpCard()
             }
         }
+        ThemeToggle(
+            vm::setLightTheme,
+            Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(8.dp)
+        )
     }
 }
 
@@ -427,12 +437,12 @@ private fun AmbientBackground(modifier: Modifier) {
                 val cyanCenter = Offset(w * (0.28f + 0.10f * cos(t)), h * (0.20f + 0.05f * sin(t)))
                 val purpleCenter = Offset(w * (0.78f + 0.08f * sin(t)), h * (0.72f + 0.06f * cos(t)))
                 drawCircle(
-                    Brush.radialGradient(listOf(Cyan.copy(alpha = 0.16f), Color.Transparent), cyanCenter, w * 0.8f),
+                    Brush.radialGradient(listOf(Palette.ambientA, Color.Transparent), cyanCenter, w * 0.8f),
                     radius = w * 0.8f,
                     center = cyanCenter
                 )
                 drawCircle(
-                    Brush.radialGradient(listOf(Purple.copy(alpha = 0.15f), Color.Transparent), purpleCenter, w * 0.85f),
+                    Brush.radialGradient(listOf(Palette.ambientB, Color.Transparent), purpleCenter, w * 0.85f),
                     radius = w * 0.85f,
                     center = purpleCenter
                 )

@@ -30,7 +30,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mouse
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -82,6 +82,8 @@ import com.smdozk.tvremote.ui.theme.OnSurfaceDim
 import com.smdozk.tvremote.ui.theme.Purple
 import com.smdozk.tvremote.ui.theme.SuccessGreen
 import com.smdozk.tvremote.ui.theme.SurfaceVariant
+import com.smdozk.tvremote.ui.theme.PadBrush
+import com.smdozk.tvremote.ui.theme.softShadow
 import com.smdozk.tvremote.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -199,7 +201,7 @@ fun TouchpadScreen(vm: MainViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PadKey(Icons.AutoMirrored.Filled.ArrowBack, "Geri") { vm.sendKey(TvKeyCode.BACK) }
             PadKey(Icons.Default.Home, "Ana Ekran", accent = true) { vm.sendKey(TvKeyCode.HOME) }
-            PadKey(Icons.Default.Tune, "Ayar") { vm.sendButton("QMENU") }
+            PadKey(Icons.Default.Settings, "Ayarlar") { vm.sendKey(TvKeyCode.SETTINGS) }
         }
     }
 }
@@ -218,8 +220,9 @@ private fun Touchpad(
 
     Box(
         modifier = modifier
+            .softShadow(PadShape, 8.dp)
             .clip(PadShape)
-            .background(Brush.verticalGradient(listOf(Color(0xFF1B1B3C), Color(0xFF0D0D21))))
+            .background(PadBrush)
             .border(1.dp, Brush.verticalGradient(listOf(Cyan.copy(alpha = 0.35f), Purple.copy(alpha = 0.15f))), PadShape)
             .semantics { contentDescription = "Dokunmatik fare alanı" }
             .graphicsLayer()
@@ -375,8 +378,9 @@ private fun GyroscopePad(
 
     Box(
         modifier = modifier
+            .softShadow(PadShape, 8.dp)
             .clip(PadShape)
-            .background(Brush.verticalGradient(listOf(Color(0xFF1B1B3C), Color(0xFF0D0D21))))
+            .background(PadBrush)
             .border(1.dp, Brush.verticalGradient(listOf(Cyan.copy(alpha = 0.45f), Purple.copy(alpha = 0.25f))), PadShape)
             .semantics { contentDescription = "Jiroskop fare alanı" }
             .graphicsLayer()

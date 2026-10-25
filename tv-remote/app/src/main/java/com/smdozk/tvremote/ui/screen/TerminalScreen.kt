@@ -41,6 +41,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smdozk.tvremote.model.TerminalEntry
 import com.smdozk.tvremote.ui.theme.*
+import com.smdozk.tvremote.ui.theme.Ink
+import com.smdozk.tvremote.ui.theme.TerminalText
+import com.smdozk.tvremote.ui.theme.TerminalRowBrush
+import com.smdozk.tvremote.ui.theme.TerminalDim
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 private val quickCommands = listOf(
@@ -86,7 +90,7 @@ private fun ModeSwitch(labels: List<String>, selected: Int, onSelect: (Int) -> U
             .fillMaxWidth()
             .height(44.dp)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(Ink(0.05f))
             .border(1.dp, GlassBorderBrush, CircleShape)
             .padding(4.dp)
     ) {
@@ -236,7 +240,7 @@ private fun LogRow(line: LogLine) {
                 }
                 append(line.message)
             },
-            color = Color(0xFFB4B4D8),
+            color = TerminalText,
             fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
             lineHeight = 15.sp
@@ -388,8 +392,8 @@ private fun TerminalEntryCard(entry: TerminalEntry) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF161628), Color(0xFF111122))))
-            .border(0.6.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
+            .background(TerminalRowBrush)
+            .border(0.6.dp, Ink(0.04f), RoundedCornerShape(10.dp))
             .padding(10.dp)
     ) {
         Text(
@@ -403,7 +407,7 @@ private fun TerminalEntryCard(entry: TerminalEntry) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = entry.output,
-                color = if (entry.isError) ErrorColor else Color(0xFF9E9EC8),
+                color = if (entry.isError) ErrorColor else TerminalDim,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
                 lineHeight = 16.sp

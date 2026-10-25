@@ -43,8 +43,11 @@ import com.smdozk.tvremote.ui.theme.KeyBrush
 import com.smdozk.tvremote.ui.theme.OnAccent
 import com.smdozk.tvremote.ui.theme.OnSurface
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
+import com.smdozk.tvremote.ui.theme.ShadowColor
+import com.smdozk.tvremote.ui.theme.softShadow
 
 private const val PRESSED_SCALE_DELTA = 0.08f
+private const val KEY_ELEVATION_DP = 3f
 
 @Composable
 fun AnimatedKey(
@@ -88,6 +91,13 @@ fun AnimatedKey(
                 scaleY = scale
                 this.shape = shape
                 clip = true
+                val shadow = ShadowColor
+                if (shadow.alpha > 0f) {
+                    // Light theme: keys sit on a soft shadow that sinks as they are pressed.
+                    shadowElevation = (KEY_ELEVATION_DP - 2f * press.value).dp.toPx()
+                    ambientShadowColor = shadow
+                    spotShadowColor = shadow
+                }
             }
             .background(background)
             .drawBehind {
@@ -208,6 +218,7 @@ fun GlassCard(
 ) {
     Column(
         modifier = modifier
+            .softShadow(shape, 10.dp)
             .background(GlassBrush, shape)
             .border(1.dp, GlassBorderBrush, shape),
         content = content

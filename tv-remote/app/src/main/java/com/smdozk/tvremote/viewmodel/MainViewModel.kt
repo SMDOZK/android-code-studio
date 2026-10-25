@@ -31,6 +31,7 @@ import com.smdozk.tvremote.model.TvInput
 import com.smdozk.tvremote.model.TvKind
 import com.smdozk.tvremote.net.Ssdp
 import com.smdozk.tvremote.net.WakeOnLan
+import com.smdozk.tvremote.ui.theme.ThemeState
 import com.smdozk.tvremote.webos.WebOsClient
 import com.smdozk.tvremote.webos.WebOsException
 import kotlinx.coroutines.CancellationException
@@ -293,6 +294,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val value = speed.coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX)
         _pointerSpeed.value = value
         prefs.edit().putFloat(KEY_POINTER_SPEED, value).apply()
+    }
+
+    val lightTheme: Boolean get() = prefs.getBoolean(KEY_LIGHT_THEME, false)
+
+    fun setLightTheme(on: Boolean) {
+        ThemeState.light = on
+        prefs.edit().putBoolean(KEY_LIGHT_THEME, on).apply()
     }
 
     fun setGyroMode(on: Boolean) {
@@ -1119,6 +1127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_LAST_WEBOS_KEY = "webos_last_key"
         const val KEY_DEV_AUTO = "dev_auto"
         const val KEY_POINTER_SPEED = "pointer_speed"
+        const val KEY_LIGHT_THEME = "light_theme"
         const val KEY_GYRO_MODE = "gyro_mode"
         const val KEY_GYRO_SPEED = "gyro_speed"
         const val KEY_GYRO_BIAS = "gyro_bias"

@@ -35,6 +35,8 @@ import com.smdozk.tvremote.ui.components.GlowButton
 import com.smdozk.tvremote.ui.components.NoticeBanner
 import com.smdozk.tvremote.ui.components.TransferCard
 import com.smdozk.tvremote.ui.theme.*
+import com.smdozk.tvremote.ui.theme.Ink
+import com.smdozk.tvremote.ui.theme.RowBrush
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
 // Some file managers report APKs as a generic binary type.
@@ -238,8 +240,8 @@ private fun AppItem(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF1A1A38), Color(0xFF111125))))
-            .border(0.8.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
+            .background(RowBrush)
+            .border(0.8.dp, Ink(0.05f), RoundedCornerShape(14.dp))
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 10.dp),

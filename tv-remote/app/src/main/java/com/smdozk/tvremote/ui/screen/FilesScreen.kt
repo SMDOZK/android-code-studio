@@ -83,6 +83,7 @@ import com.smdozk.tvremote.ui.theme.OnSurface
 import com.smdozk.tvremote.ui.theme.OnSurfaceDim
 import com.smdozk.tvremote.ui.theme.Purple
 import com.smdozk.tvremote.ui.theme.SuccessGreen
+import com.smdozk.tvremote.ui.theme.Ink
 import com.smdozk.tvremote.viewmodel.FilesController
 import com.smdozk.tvremote.viewmodel.MainViewModel
 
@@ -228,8 +229,8 @@ private fun ShortcutChip(label: String, selected: Boolean, onClick: () -> Unit) 
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         modifier = Modifier
             .clip(CircleShape)
-            .background(if (selected) Cyan.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.04f))
-            .border(1.dp, if (selected) Cyan.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.06f), CircleShape)
+            .background(if (selected) Cyan.copy(alpha = 0.14f) else Ink(0.04f))
+            .border(1.dp, if (selected) Cyan.copy(alpha = 0.5f) else Ink(0.06f), CircleShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     )
