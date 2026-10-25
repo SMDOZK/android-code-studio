@@ -1,9 +1,15 @@
 package com.smdozk.tvremote.ui.screen
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,14 +23,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
@@ -41,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -62,25 +72,53 @@ import kotlin.math.abs
 
 private val PadShape = RoundedCornerShape(28.dp)
 
-// Magic Remote style cursor: drag moves, tap clicks, two fingers scroll.
+// Gyroscope cursor: tilt phone to move, tap to click. Drag moves, tap clicks, two fingers scroll.
 @Composable
 fun TouchpadScreen(vm: MainViewModel) {
     val speed by vm.pointerSpeed.collectAsState()
+    var gyroMode by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Touchpad(
-            onMove = vm::pointerMove,
-            onScroll = vm::pointerScroll,
-            onTap = vm::pointerClick,
-            speed = speed,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (gyroMode) "Jiroskop fare" else "Dokunmatik fare",
+                color = OnSurface, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { gyroMode = !gyroMode }) {
+                Icon(
+                    if (gyroMode) Icons.Default.Mouse else Icons.Default.Explore,
+                    contentDescription = if (gyroMode) "Dokunmatik moda geç" else "Jiroskop moduna geç",
+                    tint = Cyan,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        if (gyroMode) {
+            GyroscopePad(
+                onMove = vm::pointerMove,
+                onTap = vm::pointerClick,
+                speed = speed,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        } else {
+            Touchpad(
+                onMove = vm::pointerMove,
+                onScroll = vm::pointerScroll,
+                onTap = vm::pointerClick,
+                speed = speed,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Hız", color = OnSurfaceDim, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Slider(
@@ -183,6 +221,64 @@ private fun Touchpad(
             Text("Dokunmatik fare", color = OnSurface, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             Text(
                 "Kaydır: imleç  ·  Dokun: tıkla\nİki parmak: sayfayı kaydır",
+                color = OnSurfaceDim,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun GyroscopePad(
+    onMove: (Float, Float) -> Unit,
+    onTap: () -> Unit,
+    speed: Float,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentSpeed by rememberUpdatedState(speed)
+
+    DisposableEffect(Unit) {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val gyro = sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        var lastNs = 0L
+
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                val now = event.timestamp
+                if (lastNs == 0L) { lastNs = now; return }
+                val dt = (now - lastNs) / 1_000_000_000f
+                lastNs = now
+                // values[0]=pitch (X, tilt fwd/back → cursor Y), values[1]=roll (Y, tilt left/right → cursor X)
+                val gain = currentSpeed * 900f
+                val dx = event.values[1] * gain * dt
+                val dy = event.values[0] * gain * dt
+                if (abs(dx) > 0.05f || abs(dy) > 0.05f) currentOnMove(dx, dy)
+            }
+            override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
+        }
+
+        gyro?.let { sm.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME) }
+        onDispose { sm.unregisterListener(listener) }
+    }
+
+    Box(
+        modifier = modifier
+            .clip(PadShape)
+            .background(Brush.verticalGradient(listOf(Color(0xFF1B1B3C), Color(0xFF0D0D21))))
+            .border(1.dp, Brush.verticalGradient(listOf(Cyan.copy(alpha = 0.45f), Purple.copy(alpha = 0.25f))), PadShape)
+            .semantics { contentDescription = "Jiroskop fare alanı" }
+            .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Default.Explore, contentDescription = null, tint = Cyan.copy(alpha = 0.7f), modifier = Modifier.size(44.dp))
+            Text("Jiroskop fare", color = OnSurface, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text(
+                "Telefonu eğ: imleç hareket eder\nDokunuş: tıkla",
                 color = OnSurfaceDim,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
