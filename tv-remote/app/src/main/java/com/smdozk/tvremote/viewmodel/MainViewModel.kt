@@ -149,6 +149,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _pointerSpeed = MutableStateFlow(prefs.getFloat(KEY_POINTER_SPEED, 1f).coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX))
     val pointerSpeed: StateFlow<Float> = _pointerSpeed.asStateFlow()
 
+    private val _gyroMode = MutableStateFlow(prefs.getBoolean(KEY_GYRO_MODE, false))
+    val gyroMode: StateFlow<Boolean> = _gyroMode.asStateFlow()
+
+    private val _gyroSpeed = MutableStateFlow(prefs.getFloat(KEY_GYRO_SPEED, 1f).coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX))
+    val gyroSpeed: StateFlow<Float> = _gyroSpeed.asStateFlow()
+
+    // Measured zero point of this phone's gyroscope (rad/s), from the last calibration.
+    val gyroBias: FloatArray?
+        get() = prefs.getString(KEY_GYRO_BIAS, null)?.split(',')?.mapNotNull { it.toFloatOrNull() }
+            ?.takeIf { it.size == 3 }?.toFloatArray()
+
     private val _devAuto = MutableStateFlow(prefs.getBoolean(KEY_DEV_AUTO, true))
     val devAuto: StateFlow<Boolean> = _devAuto.asStateFlow()
 
@@ -282,6 +293,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val value = speed.coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX)
         _pointerSpeed.value = value
         prefs.edit().putFloat(KEY_POINTER_SPEED, value).apply()
+    }
+
+    fun setGyroMode(on: Boolean) {
+        _gyroMode.value = on
+        prefs.edit().putBoolean(KEY_GYRO_MODE, on).apply()
+    }
+
+    fun setGyroSpeed(speed: Float) {
+        val value = speed.coerceIn(POINTER_SPEED_MIN, POINTER_SPEED_MAX)
+        _gyroSpeed.value = value
+        prefs.edit().putFloat(KEY_GYRO_SPEED, value).apply()
+    }
+
+    fun setGyroBias(bias: FloatArray) {
+        prefs.edit().putString(KEY_GYRO_BIAS, bias.joinToString(",")).apply()
     }
 
     fun pointerMove(dx: Float, dy: Float) {
@@ -1093,6 +1119,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_LAST_WEBOS_KEY = "webos_last_key"
         const val KEY_DEV_AUTO = "dev_auto"
         const val KEY_POINTER_SPEED = "pointer_speed"
+        const val KEY_GYRO_MODE = "gyro_mode"
+        const val KEY_GYRO_SPEED = "gyro_speed"
+        const val KEY_GYRO_BIAS = "gyro_bias"
         const val POINTER_SPEED_MIN = 0.5f
         const val POINTER_SPEED_MAX = 3f
         const val KEY_DEV_PHONE_PROMPTED = "dev_phone_prompted"
