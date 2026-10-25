@@ -296,7 +296,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putFloat(KEY_POINTER_SPEED, value).apply()
     }
 
-    val lightTheme: Boolean get() = prefs.getBoolean(KEY_LIGHT_THEME, false)
+    val lightTheme: Boolean get() = prefs.getBoolean(KEY_LIGHT_THEME, true)
 
     fun setLightTheme(on: Boolean) {
         ThemeState.light = on

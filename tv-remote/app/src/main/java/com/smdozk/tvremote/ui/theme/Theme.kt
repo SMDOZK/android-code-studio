@@ -122,7 +122,7 @@ private val LightPalette = AppPalette(
 )
 
 object ThemeState {
-    var light by mutableStateOf(false)
+    var light by mutableStateOf(true)
 }
 
 // Read through state, so anything drawn with these colors follows a theme switch.

@@ -10,14 +10,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.smdozk.tvremote.ui.TvRemoteApp
 import com.smdozk.tvremote.ui.theme.Background
 import com.smdozk.tvremote.ui.theme.ThemeState
 import com.smdozk.tvremote.ui.theme.TvRemoteTheme
 import com.smdozk.tvremote.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     // Same instance the composables get from viewModel(): both use this activity's store.
@@ -28,10 +30,9 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleShare(intent)
         ThemeState.light = vm.lightTheme
         applySystemBars(ThemeState.light)
+        lifecycleScope.launch { snapshotFlow { ThemeState.light }.collect(::applySystemBars) }
         requestHighestRefreshRate()
         setContent {
-            val light = ThemeState.light
-            LaunchedEffect(light) { applySystemBars(light) }
             TvRemoteTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Background) {
                     TvRemoteApp()
